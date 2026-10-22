@@ -16,34 +16,37 @@ materials:
   # Concrete C40/50 (EC2), parabola-rectangle, ULS fundamental.
   conc:
     type: concrete_ec2_gen1
-    fck: 40
-    ls: F
-
+    class: C40/50
   # Prestressing steel — option A: standard EN 10138 designation.
   # The inclined design branch towards f_pd is selected; gamma_S = 1.15
   # is resolved from ls='F'.
   ps_strand:
     type: prestressing_steel_ec2
-    class: Y1860S7        # f_p01k=1600, f_pk=1860, eps_uk=0.035, Ep=195000
+    class: St1570/1770 
     ls: F
     diagram: inclined     # or 'horizontal'
-    # eps_ud_factor: 0.9  # default, EC2 §3.3.6(7)
+    eps_ud_factor: 0.9  # default, EC2 §3.3.6(7)
+
+      # Option B (equivalent, explicit) — uncomment to use instead:
+  #ps_strand:
+    # type: prestressing_steel_ec2
+    # f_p01k: 1500
+     #f_pk: 1770
+     #eps_uk: 0.035
+     #Ep: 195000
+     #ls: F
+     #diagram: inclined
+     #eps_ud_factor: 0.9
 
   # Ordinary reinforcement (B450C).
   rebar_steel:
     type: steel
-    fyk: 450
+    fyk: 500.0
+    gamma_s: 1.15
     Es: 200000
-
-  # Option B (equivalent, explicit) — uncomment to use instead:
-  # ps_strand:
-  #   type: prestressing_steel_ec2
-  #   f_p01k: 1600
-  #   f_pk: 1860
-  #   eps_uk: 0.035
-  #   Ep: 195000
-  #   ls: F
-  #   diagram: inclined
+    k_hardening: 1.0
+    eps_su: 0.01
+    works_in_compression: true
 
 section:
   B: 400
@@ -52,8 +55,8 @@ section:
   n_fibers_y: 200
 
   rebars:
-    - {y: 60,  x: 60,  As: 314, material: rebar_steel}
-    - {y: 60,  x: 340, As: 314, material: rebar_steel}
+    - {y: 60,  x: 60,  diameter: 20, material: rebar_steel}
+    - {y: 60,  x: 340, diameter: 20, material: rebar_steel}
 
   # Prestressing tendons (Phase 1: bonded).
   tendons:
@@ -61,5 +64,21 @@ section:
       x: 200          # centred in x
       material: ps_strand
       Ap: 1400        # mm^2  (e.g. 10 strands * 140 mm^2)
-      eps_pe: 0.0065  # effective prestrain after losses (tension +)
+      eps_pe: 0.0065  # effective prestrain after losses (tension +), nicht in Promille?!
       bonded: true    # Phase 1 supports bonded only
+
+demands:
+  - name: Gravity
+    N_kN: 0
+    Mx_kNm: 0
+    My_kNm: -10
+
+output:
+  eta_norm: false
+  eta_norm_beta: false
+  eta_2D: false
+  generate_mx_my: false
+  generate_3d_surface: false
+  generate_moment_curvature: false
+  generate_polar_ductility: false
+  generate_3d_moment_curvature: false

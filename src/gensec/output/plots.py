@@ -38,6 +38,93 @@ from scipy.spatial import ConvexHull
 from ._polydraw import draw_polygon
 
 # ==================================================================
+#  Abschnitt zum Skalieren von Spanngliedern und Beschriftungen bei sehr großen Querschnitten
+# ==================================================================
+
+def _auto_scale_tendon_markers(
+    ax,
+    fraction=0.05,
+    min_diameter_pt=3.0,
+    max_diameter_pt=10.0,
+):
+    """
+    Scale section markers and annotations to the displayed
+    section size. Small bulk-fiber markers remain unchanged.
+    """
+    fig = ax.figure
+    fig.canvas.draw()
+
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    xspan = abs(x1 - x0)
+    yspan = abs(y1 - y0)
+
+    bbox = ax.get_window_extent()
+    if xspan <= 0 or yspan <= 0 or fig.dpi <= 0:
+        return
+
+    width_pt = bbox.width * 72.0 / fig.dpi
+    height_pt = bbox.height * 72.0 / fig.dpi
+
+    points_per_unit = min(
+        width_pt / xspan,
+        height_pt / yspan,
+    )
+    short_side_pt = min(xspan, yspan) * points_per_unit
+
+    # Target marker diameter based on displayed section size.
+    diameter_pt = max(
+        min_diameter_pt,
+        min(max_diameter_pt, fraction * short_side_pt),
+    )
+
+    # Existing large markers are approximately 10 pt across.
+    scale = min(1.0, diameter_pt / 10.0)
+
+    # Scale large scatter symbols (e.g. rebars and tendons),
+    # but preserve the small bulk-fiber dots.
+    for coll in ax.collections:
+    # Only scatter collections support marker-size scaling.
+        if not hasattr(coll, "get_sizes") or not hasattr(coll, "set_sizes"):
+            continue
+
+        sizes = coll.get_sizes()
+
+        if len(sizes) > 0 and max(sizes) >= 50:
+            coll.set_sizes(sizes * scale**2)
+
+    # Scale all in-section annotations and their point offsets.
+    for txt in ax.texts:
+        old_size = txt.get_fontsize()
+        txt.set_fontsize(max(4.0, old_size * scale))
+
+        # Only scale offsets for annotations using point coordinates.
+        if getattr(txt, "anncoords", None) == "offset points":
+            px, py = txt.get_position()
+            txt.set_position((px * scale, py * scale))
+
+    # Scale axis tick labels without making them excessively small.
+    for txt in ax.get_xticklabels() + ax.get_yticklabels():
+        txt.set_fontsize(max(5.0, txt.get_fontsize() * scale))
+
+    # Scale axis titles and labels.
+    ax.title.set_fontsize(
+        max(6.0, ax.title.get_fontsize() * scale)
+    )
+    ax.xaxis.label.set_fontsize(
+        max(5.0, ax.xaxis.label.get_fontsize() * scale)
+    )
+    ax.yaxis.label.set_fontsize(
+        max(5.0, ax.yaxis.label.get_fontsize() * scale)
+    )
+
+    # Scale legend text as well.
+    legend = ax.get_legend()
+    if legend is not None:
+        for txt in legend.get_texts():
+            txt.set_fontsize(max(5.0, txt.get_fontsize() * scale))
+
+# ==================================================================
 #  Section outline helper (used by all section-based plots)
 # ==================================================================
 
@@ -357,7 +444,7 @@ def plot_section_state(sec, fiber_results, field='eps', title=""):
     -------
     matplotlib.figure.Figure
     """
-    fig, ax = plt.subplots(1, 1, figsize=(9, 9))
+    fig, ax = plt.subplots(1, 1, figsize=(30, 15))
 
     # Section outline (with holes)
     _draw_polygon_outline(ax, sec, facecolor='#F5F5F5',
@@ -402,6 +489,82 @@ def plot_section_state(sec, fiber_results, field='eps', title=""):
                                   facecolor='white', alpha=0.8,
                                   edgecolor='none'))
 
+    # Änderung von mir
+    # Prestressing tendons: orange diamonds, like section_geometry.png
+
+    tn = fiber_results.get("tendons")
+
+    # Use result coordinates only if they contain actual tendons.
+    tx, ty = [], []
+
+    if tn is not None:
+        tx_result = tn.get("x", [])
+        ty_result = tn.get("y", [])
+
+        if (
+            tx_result is not None
+            and ty_result is not None
+            and len(tx_result) > 0
+            and len(tx_result) == len(ty_result)
+        ):
+            tx, ty = tx_result, ty_result
+
+    # Fall back to section geometry if result coordinates are empty.
+    if len(tx) == 0:
+        tx = getattr(sec, "x_tendons", [])
+        ty = getattr(sec, "y_tendons", [])
+
+    if len(tx) > 0 and len(tx) == len(ty):
+        # Select the actual tendon result value.
+        values = None
+
+        if tn is not None:
+            if field == "eps":
+                raw = tn.get("eps_tot")
+                if raw is not None:
+                    values = [float(v) * 1000 for v in raw]  # ‰
+            elif field == "sigma":
+                raw = tn.get("sigma")
+                if raw is not None:
+                    values = [float(v) for v in raw]  # MPa
+
+        # Same symbol and colour as in section_geometry.png.
+        ax.scatter(
+            tx,
+            ty,
+            s=100,
+            marker="D",
+            facecolors="#FF8C00",
+            edgecolors="black",
+            linewidths=1.0,
+            label="Prestressing tendon",
+            zorder=6,
+        )
+
+        # Annotate values in the same style as the rebars.
+        for i, (x, y) in enumerate(zip(tx, ty)):
+            if values is not None and len(values) == len(tx):
+                txt = f"P{i+1}: {values[i]:.1f}"
+            else:
+                txt = f"P{i+1}"
+
+            ax.annotate(
+                txt,
+                (x, y),
+                xytext=(12, -4),
+                textcoords="offset points",
+                fontsize=7,
+                fontweight="bold",
+                color="black",
+                zorder=7,
+                bbox=dict(
+                    boxstyle="round,pad=0.2",
+                    facecolor="white",
+                    alpha=0.8,
+                    edgecolor="none",
+                ),
+            )
+
     # Neutral axis
     _draw_neutral_axis(ax, sec, fiber_results)
 
@@ -413,6 +576,7 @@ def plot_section_state(sec, fiber_results, field='eps', title=""):
     ax.grid(True, alpha=0.15)
     ax.set_title(title or f"Section — {unit}")
     fig.tight_layout()
+    _auto_scale_tendon_markers(ax)
     return fig
 
 
@@ -439,15 +603,17 @@ def plot_section(sec, fiber_results=None, title=""):
     matplotlib.figure.Figure
     """
     if fiber_results is not None:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 15))
         _draw_geometry_panel(ax1, sec, fiber_results)
         _draw_field_panel(ax2, sec, fiber_results, field='sigma')
     else:
-        fig, ax1 = plt.subplots(1, 1, figsize=(7, 8))
+        fig, ax1 = plt.subplots(1, 1, figsize=(30, 15))
         _draw_geometry_panel(ax1, sec, fiber_results=None)
 
     fig.suptitle(title or "Cross-Section", fontsize=14)
     fig.tight_layout()
+    for ax in fig.axes:
+        _auto_scale_tendon_markers(ax)
     return fig
 
 
@@ -473,6 +639,38 @@ def _draw_geometry_panel(ax, sec, fiber_results=None):
                     bbox=dict(boxstyle='round,pad=0.2',
                               facecolor='white', alpha=0.8,
                               edgecolor='none'))
+
+    # Änderung von mir
+    # Prestressing tendons
+    x_tendons = getattr(sec, "x_tendons", [])
+    y_tendons = getattr(sec, "y_tendons", [])
+
+    if len(x_tendons) > 0:
+        ax.scatter(
+            x_tendons,
+            y_tendons,
+            s=100,
+            marker='D',
+            facecolors='#FF8C00',
+            edgecolors='black',
+            linewidths=1.0,
+            label='Prestressing tendon',
+            zorder=6,
+        )
+
+        for i, (x, y) in enumerate(zip(x_tendons, y_tendons)):
+            ax.annotate(
+                f"P{i+1}",
+                (x, y),
+                xytext=(7, 7),
+                textcoords="offset points",
+                fontsize=8,
+                fontweight='bold',
+                color='black',
+                zorder=7,
+            )
+
+        ax.legend(loc='best', fontsize=8)
 
     if fiber_results is not None:
         _draw_neutral_axis(ax, sec, fiber_results)
@@ -1113,7 +1311,7 @@ def plot_3d_surface(nm_3d, demands=None, title="",
     face_colors = cmap(norm_c(GN))
 
     # ---- Two-panel figure: above + below ----
-    fig = plt.figure(figsize=(18, 9))
+    fig = plt.figure(figsize=(30, 15))
     views = [
         (1, 30, -55, "Perspective — tension side"),
         (2, -30, -55, "Perspective — compression side"),
@@ -1602,7 +1800,7 @@ def plot_stress_profile(results, sec, title=""):
     -------
     matplotlib.figure.Figure
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(30, 15))
 
     # Strain map
     _draw_polygon_outline(ax1, sec, facecolor='#F5F5F5',
@@ -1631,6 +1829,48 @@ def plot_stress_profile(results, sec, title=""):
                          bbox=dict(boxstyle='round,pad=0.2',
                                    facecolor='white', alpha=0.85,
                                    edgecolor='none'), zorder=6)
+
+    # Änderungen von mir
+    # Prestressing tendons — strain map (left panel)
+    tn = results.get("tendons", {})
+    tx = tn.get("x", [])
+    ty = tn.get("y", [])
+    eps_tot = tn.get("eps_tot")
+
+    if (
+        eps_tot is not None
+        and len(tx) > 0
+        and len(tx) == len(ty) == len(eps_tot)
+    ):
+        ax1.scatter(
+            tx, ty,
+            s=100,
+            marker="D",
+            facecolors="#FF8C00",
+            edgecolors="black",
+            linewidths=1.0,
+            label="Prestressing tendon",
+            zorder=7,
+        )
+
+        for i, (x, y) in enumerate(zip(tx, ty)):
+            ax1.annotate(
+                f"P{i+1}: {eps_tot[i] * 1000:.2f}‰",
+                (x, y),
+                xytext=(12, -4),
+                textcoords="offset points",
+                fontsize=7,
+                fontweight="bold",
+                color="black",
+                zorder=8,
+                bbox=dict(
+                    boxstyle="round,pad=0.2",
+                    facecolor="white",
+                    alpha=0.8,
+                    edgecolor="none",
+                ),
+            )
+
 
     _draw_neutral_axis(ax1, sec, results)
     _draw_reference_axes(ax1, sec)
@@ -1665,6 +1905,47 @@ def plot_stress_profile(results, sec, title=""):
                                    facecolor='white', alpha=0.85,
                                    edgecolor='none'), zorder=6)
 
+    # Änderungen von mir
+    # Prestressing tendons — stress map (right panel)
+    tn = results.get("tendons", {})
+    tx = tn.get("x", [])
+    ty = tn.get("y", [])
+    sigma_t = tn.get("sigma")
+
+    if (
+        sigma_t is not None
+        and len(tx) > 0
+        and len(tx) == len(ty) == len(sigma_t)
+    ):
+        ax2.scatter(
+            tx, ty,
+            s=100,
+            marker="D",
+            facecolors="#FF8C00",
+            edgecolors="black",
+            linewidths=1.0,
+            label="Prestressing tendon",
+            zorder=7,
+        )
+
+        for i, (x, y) in enumerate(zip(tx, ty)):
+            ax2.annotate(
+                f"P{i+1}: {sigma_t[i]:.1f}",
+                (x, y),
+                xytext=(12, -4),
+                textcoords="offset points",
+                fontsize=7,
+                fontweight="bold",
+                color="black",
+                zorder=8,
+                bbox=dict(
+                    boxstyle="round,pad=0.2",
+                    facecolor="white",
+                    alpha=0.8,
+                    edgecolor="none",
+                ),
+            )
+
     _draw_neutral_axis(ax2, sec, results)
     _draw_reference_axes(ax2, sec)
     _section_axis_limits(ax2, sec)
@@ -1674,6 +1955,8 @@ def plot_stress_profile(results, sec, title=""):
 
     fig.suptitle(title or "Section State", fontsize=14)
     fig.tight_layout()
+    for ax in fig.axes:
+        _auto_scale_tendon_markers(ax)
     return fig
 
 

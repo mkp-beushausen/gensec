@@ -291,71 +291,392 @@ def export_fiber_results_csv(fiber_results, filepath):
     """
     Export per-fiber strain/stress state to CSV.
 
-    Two sections in the file: BULK and REBARS, separated by a blank line.
+    Sections:
+    - BULK FIBERS
+    - REBAR LAYERS
+    - PRESTRESSING TENDONS, if present
+
+    Below the reinforcing-steel and prestressing-steel results,
+    the minimum and maximum stresses are exported with all
+    associated result values.
 
     Parameters
     ----------
     fiber_results : dict
-        Output of :meth:`FiberSolver.get_fiber_results`.
+        Output of FiberSolver.get_fiber_results.
+
     filepath : str
+        Output CSV filepath.
     """
-    with open(filepath, 'w', newline='') as f:
+
+    with open(
+        filepath,
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+
         w = csv.writer(f)
+
+        # ==========================================================
+        # BULK FIBERS
+        # ==========================================================
 
         bulk = fiber_results["bulk"]
         has_x = "x" in bulk
 
-        # Bulk fibers
         w.writerow(["# BULK FIBERS"])
-        header_b = (["x_mm", "y_mm", "eps", "sigma_MPa", "dA_mm2"]
-                    if has_x else
-                    ["y_mm", "eps", "sigma_MPa", "dA_mm2"])
+
+        header_b = (
+            [
+                "x_mm",
+                "y_mm",
+                "eps",
+                "sigma_MPa",
+                "dA_mm2",
+            ]
+            if has_x
+            else
+            [
+                "y_mm",
+                "eps",
+                "sigma_MPa",
+                "dA_mm2",
+            ]
+        )
+
         w.writerow(header_b)
+
         for i in range(len(bulk["y"])):
+
             row = []
+
             if has_x:
-                row.append(f"{bulk['x'][i]:.2f}")
+                row.append(
+                    f"{bulk['x'][i]:.2f}"
+                )
+
             row += [
                 f"{bulk['y'][i]:.2f}",
                 f"{bulk['eps'][i]:.8f}",
                 f"{bulk['sigma'][i]:.4f}",
                 f"{bulk['dA'][i]:.2f}",
             ]
+
             w.writerow(row)
 
         w.writerow([])
 
-        # Rebars
+        # ==========================================================
+        # REBAR LAYERS
+        # ==========================================================
+
         rb = fiber_results["rebars"]
+
         has_x_r = "x" in rb
         has_net = "sigma_net" in rb
+
         w.writerow(["# REBAR LAYERS"])
+
         header_r = ["bar_#"]
+
         if has_x_r:
             header_r.append("x_mm")
-        header_r += ["y_mm", "eps", "sigma_MPa"]
+
+        header_r += [
+            "y_mm",
+            "eps",
+            "sigma_MPa",
+        ]
+
         if has_net:
             header_r.append("sigma_net_MPa")
-        header_r += ["A_mm2", "F_net_kN"]
+
+        header_r += [
+            "A_mm2",
+            "F_net_kN",
+        ]
+
         w.writerow(header_r)
+
+        # >>> NEW
+        # Store reinforcing-steel result rows for the
+        # subsequent evaluation of stress extrema.
+        rebar_results = []
+        # <<< END NEW
+
         for i in range(len(rb["y"])):
-            sig_net = rb["sigma_net"][i] if has_net else rb["sigma"][i]
-            F_net = sig_net * rb["A"][i] / 1e3
-            row = [f"{i+1}"]
+
+            sigma = float(
+                rb["sigma"][i]
+            )
+
+            sigma_net = float(
+                rb["sigma_net"][i]
+                if has_net
+                else sigma
+            )
+
+            area = float(
+                rb["A"][i]
+            )
+
+            force_net = (
+                sigma_net
+                * area
+                / 1e3
+            )
+
+            # >>> NEW
+            result = {
+                "bar_number": i + 1,
+                "x_mm": (
+                    float(rb["x"][i])
+                    if has_x_r
+                    else None
+                ),
+                "y_mm": float(rb["y"][i]),
+                "eps": float(rb["eps"][i]),
+                "sigma_MPa": sigma,
+                "sigma_net_MPa": sigma_net,
+                "A_mm2": area,
+                "F_net_kN": force_net,
+            }
+
+            rebar_results.append(result)
+            # <<< END NEW
+
+            row = [
+                result["bar_number"]
+            ]
+
             if has_x_r:
-                row.append(f"{rb['x'][i]:.2f}")
+                row.append(
+                    f"{result['x_mm']:.2f}"
+                )
+
             row += [
-                f"{rb['y'][i]:.2f}",
-                f"{rb['eps'][i]:.8f}",
-                f"{rb['sigma'][i]:.4f}",
+                f"{result['y_mm']:.2f}",
+                f"{result['eps']:.8f}",
+                f"{result['sigma_MPa']:.4f}",
             ]
+
             if has_net:
-                row.append(f"{sig_net:.4f}")
+                row.append(
+                    f"{result['sigma_net_MPa']:.4f}"
+                )
+
             row += [
-                f"{rb['A'][i]:.2f}",
-                f"{F_net:.4f}",
+                f"{result['A_mm2']:.2f}",
+                f"{result['F_net_kN']:.4f}",
             ]
+
             w.writerow(row)
+
+        # >>> NEW
+        # ==========================================================
+        # EXTREME REINFORCING-STEEL STRESSES
+        # ==========================================================
+
+        if rebar_results:
+
+            min_rebar = min(
+                rebar_results,
+                key=lambda result: result["sigma_MPa"],
+            )
+
+            max_rebar = max(
+                rebar_results,
+                key=lambda result: result["sigma_MPa"],
+            )
+
+            def write_rebar_extreme(title, result):
+                """
+                Write one reinforcing-steel extreme with the same
+                columns as the regular reinforcing-steel results.
+                """
+
+                w.writerow([])
+                w.writerow([title])
+                w.writerow(header_r)
+
+                extreme_row = [
+                    result["bar_number"]
+                ]
+
+                if has_x_r:
+                    extreme_row.append(
+                        f"{result['x_mm']:.2f}"
+                    )
+
+                extreme_row += [
+                    f"{result['y_mm']:.2f}",
+                    f"{result['eps']:.8f}",
+                    f"{result['sigma_MPa']:.4f}",
+                ]
+
+                if has_net:
+                    extreme_row.append(
+                        f"{result['sigma_net_MPa']:.4f}"
+                    )
+
+                extreme_row += [
+                    f"{result['A_mm2']:.2f}",
+                    f"{result['F_net_kN']:.4f}",
+                ]
+
+                w.writerow(extreme_row)
+
+            write_rebar_extreme(
+                "# MINIMUM REBAR STRESS",
+                min_rebar,
+            )
+
+            write_rebar_extreme(
+                "# MAXIMUM REBAR STRESS",
+                max_rebar,
+            )
+
+        # <<< END NEW
+
+        # ==========================================================
+        # PRESTRESSING TENDONS
+        # ======================================
+
+        if "tendons" in fiber_results:
+
+            tn = fiber_results["tendons"]
+
+            w.writerow([])
+            w.writerow(["# PRESTRESSING TENDONS"])
+
+            tendon_header = [
+                "tendon_#",
+                "x_mm",
+                "y_mm",
+                "eps_sec",
+                "eps_init",
+                "eps_tot",
+                "sigma_MPa",
+                "sigma_net_MPa",
+                "A_mm2",
+                "embedded",
+                "F_net_kN",
+            ]
+
+            w.writerow(tendon_header)
+
+            # >>> NEW
+            # Store prestressing-steel result rows for the
+            # subsequent evaluation of stress extrema.
+            tendon_results = []
+            # <<< END NEW
+
+            for i in range(len(tn["y"])):
+
+                sigma = float(
+                    tn["sigma"][i]
+                )
+
+                sigma_net = float(
+                    tn["sigma_net"][i]
+                )
+
+                area = float(
+                    tn["A"][i]
+                )
+
+                force_net = (
+                    sigma_net
+                    * area
+                    / 1e3
+                )
+
+                # >>> NEW
+                result = {
+                    "tendon_number": i + 1,
+                    "x_mm": float(tn["x"][i]),
+                    "y_mm": float(tn["y"][i]),
+                    "eps_sec": float(tn["eps_sec"][i]),
+                    "eps_init": float(tn["eps_init"][i]),
+                    "eps_tot": float(tn["eps_tot"][i]),
+                    "sigma_MPa": sigma,
+                    "sigma_net_MPa": sigma_net,
+                    "A_mm2": area,
+                    "embedded": bool(tn["embedded"][i]),
+                    "F_net_kN": force_net,
+                }
+
+                tendon_results.append(result)
+                # <<< END NEW
+
+                w.writerow([
+                    result["tendon_number"],
+                    f"{result['x_mm']:.2f}",
+                    f"{result['y_mm']:.2f}",
+                    f"{result['eps_sec']:.8f}",
+                    f"{result['eps_init']:.8f}",
+                    f"{result['eps_tot']:.8f}",
+                    f"{result['sigma_MPa']:.4f}",
+                    f"{result['sigma_net_MPa']:.4f}",
+                    f"{result['A_mm2']:.2f}",
+                    result["embedded"],
+                    f"{result['F_net_kN']:.4f}",
+                ])
+
+            # >>> NEW
+            # ======================================================
+            # EXTREME PRESTRESSING-STEEL STRESSES
+            # ======================================================
+
+            if tendon_results:
+
+                min_tendon = min(
+                    tendon_results,
+                    key=lambda result: result["sigma_MPa"],
+                )
+
+                max_tendon = max(
+                    tendon_results,
+                    key=lambda result: result["sigma_MPa"],
+                )
+
+                def write_tendon_extreme(title, result):
+                    """
+                    Write one prestressing-steel extreme with the same
+                    columns as the regular tendon results.
+                    """
+
+                    w.writerow([])
+                    w.writerow([title])
+                    w.writerow(tendon_header)
+
+                    w.writerow([
+                        result["tendon_number"],
+                        f"{result['x_mm']:.2f}",
+                        f"{result['y_mm']:.2f}",
+                        f"{result['eps_sec']:.8f}",
+                        f"{result['eps_init']:.8f}",
+                        f"{result['eps_tot']:.8f}",
+                        f"{result['sigma_MPa']:.4f}",
+                        f"{result['sigma_net_MPa']:.4f}",
+                        f"{result['A_mm2']:.2f}",
+                        result["embedded"],
+                        f"{result['F_net_kN']:.4f}",
+                    ])
+
+                write_tendon_extreme(
+                    "# MINIMUM TENDON STRESS",
+                    min_tendon,
+                )
+
+                write_tendon_extreme(
+                    "# MAXIMUM TENDON STRESS",
+                    max_tendon,
+                )
+
+            # <<< END NEW
+            
 
 
 def export_3d_surface_csv(nm_3d, filepath):

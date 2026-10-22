@@ -50,6 +50,8 @@ from .ec2_bridge import (
     concrete_from_ec2, concrete_from_class, steel_from_en10025,
     prestress_from_ec2, prestress_from_class,
 )
+#Änderung von mir
+from .concrete_ec2_nonlinear import ConcreteEC2Nonlinear
 
 __all__ = [
     "Material", "Concrete", "Steel", "PrestressingSteel",
@@ -59,4 +61,5 @@ __all__ = [
     "Steel_plate", "Steel_EN10025_2",
     "concrete_from_ec2", "concrete_from_class", "steel_from_en10025",
     "prestress_from_ec2", "prestress_from_class",
+    "ConcreteEC2Nonlinear",
 ]

@@ -70,10 +70,9 @@ def governing_eta(result, result_type="demand"):
 
     Returns
     -------
-    float
-        The governing (worst-case) :math:`\eta`.  Returns ``inf`` if
-        no numeric :math:`\eta` is available (should not happen in
-        normal operation).
+    float or None
+        The governing (worst-case) :math:`\eta`, or ``None`` when no
+        numeric :math:`\eta` is available.
 
     Notes
     -----
@@ -107,7 +106,7 @@ def governing_eta(result, result_type="demand"):
         v = result.get(key)
         if v is not None and np.isfinite(v):
             vals.append(float(v))
-    return max(vals) if vals else float("inf")
+    return max(vals) if vals else None
 
 
 # ======================================================================
@@ -141,7 +140,14 @@ def rank_results(results, result_type="demand"):
         copy["_eta_governing"] = governing_eta(r, result_type)
         decorated.append(copy)
 
-    decorated.sort(key=lambda x: x["_eta_governing"], reverse=True)
+    decorated.sort(
+        key=lambda x: (
+            x["_eta_governing"] is not None,
+            x["_eta_governing"] if x["_eta_governing"] is not None else 0.0,
+            not x.get("verified", False),
+        ),
+        reverse=True,
+    )
 
     for i, r in enumerate(decorated, start=1):
         r["_rank"] = i
@@ -207,12 +213,11 @@ def compute_summary_stats(results, result_type="demand"):
 
         - ``n_total`` (int): total number of items.
         - ``n_verified`` (int): items with :math:`\eta \le 1`.
-        - ``n_fail`` (int): items with :math:`\eta > 1`.
-        - ``eta_max`` (float): worst :math:`\eta`.
-        - ``eta_mean`` (float): mean of governing :math:`\eta`.
-        - ``eta_p95`` (float): 95th percentile.
-        - ``eta_p99`` (float): 99th percentile.
-        - ``eta_median`` (float): 50th percentile.
+        - ``n_fail`` (int): items marked unverified, or with
+          :math:`\eta > 1` when no status is present.
+        - ``eta_max``, ``eta_mean``, ``eta_p95``, ``eta_p99``, and
+          ``eta_median``: statistics over available finite
+          :math:`\eta` values, or ``None`` when none are available.
         - ``governing_name`` (str): name of the governing item.
         - ``governing_rank`` (int): rank of the governing item (always 1).
         - ``all_verified`` (bool): True if every item passes.
@@ -239,23 +244,40 @@ def compute_summary_stats(results, result_type="demand"):
         }
 
     ranked = rank_results(results, result_type)
-    etas = np.array([r["_eta_governing"] for r in ranked])
+    etas = np.array([
+        r["_eta_governing"] for r in ranked
+        if r["_eta_governing"] is not None
+        and np.isfinite(r["_eta_governing"])
+    ])
 
-    n_total = len(etas)
-    n_fail = int(np.sum(etas > 1.0))
-    governing = ranked[0]
+    n_total = len(ranked)
+    n_fail = sum(
+        not r.get(
+            "verified",
+            r["_eta_governing"] is not None
+            and r["_eta_governing"] <= 1.0,
+        )
+        for r in ranked
+    )
+    governing = next(
+        (r for r in ranked if r["_eta_governing"] is not None),
+        None,
+    )
+    eta_stats = {
+        "eta_max": float(np.max(etas)) if etas.size else None,
+        "eta_mean": float(np.mean(etas)) if etas.size else None,
+        "eta_p95": float(np.percentile(etas, 95)) if etas.size else None,
+        "eta_p99": float(np.percentile(etas, 99)) if etas.size else None,
+        "eta_median": float(np.percentile(etas, 50)) if etas.size else None,
+    }
 
     return {
         "n_total": n_total,
         "n_verified": n_total - n_fail,
         "n_fail": n_fail,
-        "eta_max": float(etas[0]),
-        "eta_mean": float(np.mean(etas)),
-        "eta_p95": float(np.percentile(etas, 95)),
-        "eta_p99": float(np.percentile(etas, 99)),
-        "eta_median": float(np.percentile(etas, 50)),
-        "governing_name": governing.get("name", ""),
-        "governing_rank": 1,
+        **eta_stats,
+        "governing_name": governing.get("name", "") if governing else "",
+        "governing_rank": governing.get("_rank", 0) if governing else 0,
         "all_verified": n_fail == 0,
     }
 
@@ -293,14 +315,15 @@ def _format_summary_block(title, stats):
         f"  Items: {n}    Verified: {nv}    "
         f"Failed: {nf}"
     )
+    fmt_eta = lambda value: f"{value:.4f}" if value is not None else "n/a"
     lines.append(
-        f"  eta_max: {stats['eta_max']:.4f}    "
-        f"eta_mean: {stats['eta_mean']:.4f}    "
-        f"eta_p95: {stats['eta_p95']:.4f}    "
-        f"eta_p99: {stats['eta_p99']:.4f}"
+        f"  eta_max: {fmt_eta(stats['eta_max'])}    "
+        f"eta_mean: {fmt_eta(stats['eta_mean'])}    "
+        f"eta_p95: {fmt_eta(stats['eta_p95'])}    "
+        f"eta_p99: {fmt_eta(stats['eta_p99'])}"
     )
     gov = stats["governing_name"]
-    if gov:
+    if gov and stats["eta_max"] is not None:
         lines.append(f"  Governing: {gov}  (eta = {stats['eta_max']:.4f})")
 
     if stats["all_verified"]:

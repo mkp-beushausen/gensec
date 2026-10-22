@@ -366,6 +366,10 @@ PrestressClassData: Dict[str, _PSClass] = {
                         Ep=195000.0, kind="strand"),
     "Y1960S7": _PSClass(f_p01k=1680.0, f_pk=1960.0, eps_uk=0.035,
                         Ep=195000.0, kind="strand"),
+    "St1570/1770": _PSClass(f_p01k=1570.0, f_pk=1770.0, eps_uk=0.035,
+                            Ep=195000.0, kind="strand"),
+    "St140/160": _PSClass(f_p01k=1370.0, f_pk=1570.0, eps_uk=0.035,
+                            Ep=201105.0, kind="strand"),
     # Cold-drawn wires (Ep ~ 205 GPa)
     "Y1670C":  _PSClass(f_p01k=1440.0, f_pk=1670.0, eps_uk=0.035,
                         Ep=205000.0, kind="wire"),

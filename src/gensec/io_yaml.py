@@ -89,7 +89,7 @@ The YAML parser detects which mode to use:
 import yaml
 import numpy as np
 
-from .materials import Concrete, Steel, TabulatedMaterial
+from .materials import Concrete, Steel, TabulatedMaterial, ConcreteEC2Nonlinear
 from .geometry.fiber import RebarLayer, Tendon
 from .geometry.section import RectSection
 from .geometry.geometry import GenericSection
@@ -112,6 +112,10 @@ _MATERIAL_BUILDERS = {
         "cls": Concrete,
         "params": ["fck", "gamma_c", "alpha_cc", "n_parabola",
                     "eps_c2", "eps_cu2", "fct", "Ec"],
+    },
+    "concrete_ec2_nonlinear": {
+        "cls": ConcreteEC2Nonlinear,
+        "params": ["fc", "Ecm", "eps_c1", "eps_cu", "k", "fct", "Et", "eps_tu", "name"],
     },
     "steel": {
         "cls": Steel,

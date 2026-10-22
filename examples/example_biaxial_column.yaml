@@ -16,7 +16,7 @@ materials:
 
   steel_1:
     type: steel
-    fyk: 450.0
+    fyk: 500.0
     gamma_s: 1.15
     Es: 200000
     k_hardening: 1.0

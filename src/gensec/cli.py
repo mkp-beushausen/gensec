@@ -33,6 +33,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+import csv
 
 from .io_yaml import load_yaml, staged_ops_present
 from .solver import FiberSolver, NMDiagram
@@ -206,11 +207,23 @@ def _plot(args):
         print(f"ERROR: Failed to plot '{filepath}': {exc}")
         sys.exit(1)
 
+def _create_timestamped_output_dir(output_dir):
+    """Create a unique output directory for each analysis run."""
+    from pathlib import Path
+    from datetime import datetime
+
+    base_dir = Path(output_dir)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
+    outdir = base_dir / f"run_{timestamp}"
+    outdir.mkdir(parents=True, exist_ok=False)
+
+    print(f"\nOutput directory: {outdir.resolve()}")
+    return str(outdir)
 
 def _run(args):
     """``gensec run`` subcommand: full analysis pipeline."""
-    outdir = args.output_dir
-    os.makedirs(outdir, exist_ok=True)
+    outdir = _create_timestamped_output_dir(args.output_dir)
 
     # --- Load ---
     print(f"\nLoading: {args.input_file}")
@@ -482,33 +495,315 @@ def _run(args):
 
             if sol["converged"]:
                 fr = solver.get_fiber_results(
-                    sol["eps0"], sol["chi_x"], sol["chi_y"])
+                    sol["eps0"],
+                    sol["chi_x"],
+                    sol["chi_y"],
+                )
+
                 print(f"\n  --- {label} ---")
                 print_fiber_results(fr, section)
 
-                p = os.path.join(outdir, f"fibers_{label}.csv")
+                # ==========================================================
+                # Existing fiber CSV export
+                # ==========================================================
+
+                p = os.path.join(
+                    outdir,
+                    f"fibers_{label}.csv",
+                )
+
                 export_fiber_results_csv(fr, p)
                 print(f"    Exported: {p}")
 
+                # ==========================================================
+                # Section vertex results
+                #
+                # GenSec strain plane:
+                #
+                # eps(x, y) =
+                #     eps0
+                #     + chi_x * (y - y_ref)
+                #     - chi_y * (x - x_ref)
+                #
+                # The solver reference point is normally the centroid
+                # of the gross concrete polygon.
+                # ==========================================================
+
+                eps0 = float(sol["eps0"])
+                chi_x = float(sol["chi_x"])
+                chi_y = float(sol["chi_y"])
+
+                x_ref = float(solver.x_ref)
+                y_ref = float(solver.y_ref)
+
+                # Shapely repeats the first coordinate at the end of the
+                # exterior ring. [:-1] removes this duplicate.
+                vertices = list(
+                    section.polygon.exterior.coords
+                )[:-1]
+
+                vertex_results = []
+
+                material = section.bulk_material
+
+                for i, (x, y) in enumerate(
+                    vertices,
+                    start=1,
+                ):
+                    x = float(x)
+                    y = float(y)
+
+                    # Lever arms relative to the solver reference point
+                    lx = x - x_ref
+                    ly = y - y_ref
+
+                    # Same strain plane as used by GenSec's strain_field()
+                    eps = (
+                        eps0
+                        + chi_x * ly
+                        - chi_y * lx
+                    )
+
+                    # Material response at the actual polygon vertex
+                    sigma = float(
+                        material.stress(eps)
+                    )
+
+                    tangent = float(
+                        material.tangent(eps)
+                    )
+
+                    vertex_results.append({
+                        "vertex": i,
+                        "x_mm": x,
+                        "y_mm": y,
+                        "eps": eps,
+                        "eps_mm_m": eps * 1000.0,
+                        "sigma_MPa": sigma,
+                        "tangent_MPa": tangent,
+                    })
+
+                # ==========================================================
+                # Print vertex results
+                # ==========================================================
+
+                print("\n  SECTION VERTICES")
+
+                print(
+                    "  vertex |"
+                    "       x [mm] |"
+                    "       y [mm] |"
+                    "   eps [mm/m] |"
+                    "  sigma [MPa] |"
+                    " tangent [MPa]"
+                )
+
+                print(
+                    "  -------+"
+                    "--------------+"
+                    "--------------+"
+                    "--------------+"
+                    "--------------+"
+                    "--------------"
+                )
+
+                for r in vertex_results:
+                    print(
+                        f"  {r['vertex']:6d} |"
+                        f" {r['x_mm']:12.2f} |"
+                        f" {r['y_mm']:12.2f} |"
+                        f" {r['eps_mm_m']:12.5f} |"
+                        f" {r['sigma_MPa']:12.4f} |"
+                        f" {r['tangent_MPa']:12.4f}"
+                    )
+
+                    # ==========================================================
+                    # Determine minimum and maximum vertex values
+                    # ==========================================================
+
+                    min_eps_vertex = min(
+                        vertex_results,
+                        key=lambda r: r["eps"],
+                    )
+
+                    max_eps_vertex = max(
+                        vertex_results,
+                        key=lambda r: r["eps"],
+                    )
+
+                    min_sigma_vertex = min(
+                        vertex_results,
+                        key=lambda r: r["sigma_MPa"],
+                    )
+
+                    max_sigma_vertex = max(
+                        vertex_results,
+                        key=lambda r: r["sigma_MPa"],
+                    )
+
+
+                    # ==========================================================
+                    # Export vertex results and extreme values to CSV
+                    # ==========================================================
+
+                    p_vertices = os.path.join(
+                        outdir,
+                        f"vertices_{label}.csv",
+                    )
+
+                    with open(
+                        p_vertices,
+                        "w",
+                        newline="",
+                        encoding="utf-8",
+                    ) as f:
+
+                        writer = csv.writer(f)
+
+                        # ------------------------------------------------------
+                        # Header
+                        # ------------------------------------------------------
+
+                        writer.writerow([
+                            "entry",
+                            "vertex_#",
+                            "x_mm",
+                            "y_mm",
+                            "eps",
+                            "eps_mm_m",
+                            "sigma_MPa",
+                            "tangent_MPa",
+                        ])
+
+                        # ------------------------------------------------------
+                        # All polygon vertices
+                        # ------------------------------------------------------
+
+                        for r in vertex_results:
+
+                            writer.writerow([
+                                "vertex",
+                                r["vertex"],
+                                f"{r['x_mm']:.6f}",
+                                f"{r['y_mm']:.6f}",
+                                f"{r['eps']:.10f}",
+                                f"{r['eps_mm_m']:.6f}",
+                                f"{r['sigma_MPa']:.6f}",
+                                f"{r['tangent_MPa']:.6f}",
+                            ])
+
+                        # ------------------------------------------------------
+                        # Empty separator row
+                        # ------------------------------------------------------
+
+                        writer.writerow([])
+
+                        # ------------------------------------------------------
+                        # Extreme values
+                        # ------------------------------------------------------
+
+                        writer.writerow([
+                            "minimum_strain",
+                            min_eps_vertex["vertex"],
+                            f"{min_eps_vertex['x_mm']:.6f}",
+                            f"{min_eps_vertex['y_mm']:.6f}",
+                            f"{min_eps_vertex['eps']:.10f}",
+                            f"{min_eps_vertex['eps_mm_m']:.6f}",
+                            f"{min_eps_vertex['sigma_MPa']:.6f}",
+                            f"{min_eps_vertex['tangent_MPa']:.6f}",
+                        ])
+
+                        writer.writerow([
+                            "maximum_strain",
+                            max_eps_vertex["vertex"],
+                            f"{max_eps_vertex['x_mm']:.6f}",
+                            f"{max_eps_vertex['y_mm']:.6f}",
+                            f"{max_eps_vertex['eps']:.10f}",
+                            f"{max_eps_vertex['eps_mm_m']:.6f}",
+                            f"{max_eps_vertex['sigma_MPa']:.6f}",
+                            f"{max_eps_vertex['tangent_MPa']:.6f}",
+                        ])
+
+                        writer.writerow([
+                            "minimum_stress",
+                            min_sigma_vertex["vertex"],
+                            f"{min_sigma_vertex['x_mm']:.6f}",
+                            f"{min_sigma_vertex['y_mm']:.6f}",
+                            f"{min_sigma_vertex['eps']:.10f}",
+                            f"{min_sigma_vertex['eps_mm_m']:.6f}",
+                            f"{min_sigma_vertex['sigma_MPa']:.6f}",
+                            f"{min_sigma_vertex['tangent_MPa']:.6f}",
+                        ])
+
+                        writer.writerow([
+                            "maximum_stress",
+                            max_sigma_vertex["vertex"],
+                            f"{max_sigma_vertex['x_mm']:.6f}",
+                            f"{max_sigma_vertex['y_mm']:.6f}",
+                            f"{max_sigma_vertex['eps']:.10f}",
+                            f"{max_sigma_vertex['eps_mm_m']:.6f}",
+                            f"{max_sigma_vertex['sigma_MPa']:.6f}",
+                            f"{max_sigma_vertex['tangent_MPa']:.6f}",
+                        ])
+
+                    print(f"    Exported: {p_vertices}")
+                # ==========================================================
+                # Existing section plot
+                # ==========================================================
+
                 fig = plot_section(
-                    section, fr,
-                    title=(f"{label}: N={N_d/1e3:.0f},"
-                           f" Mx={Mx_d/1e6:.0f},"
-                           f" My={My_d/1e6:.0f} kNm"))
-                p = os.path.join(outdir, f"section_{label}.png")
-                fig.savefig(p, dpi=150)
+                    section,
+                    fr,
+                    title=(
+                        f"{label}: N={N_d/1e3:.0f},"
+                        f" Mx={Mx_d/1e6:.0f},"
+                        f" My={My_d/1e6:.0f} kNm"
+                    ),
+                )
+
+                p = os.path.join(
+                    outdir,
+                    f"section_{label}.png",
+                )
+
+                fig.savefig(
+                    p,
+                    dpi=150,
+                )
+
                 plt.close(fig)
+
                 print(f"  Exported: {p}")
 
+                # ==========================================================
+                # Existing stress profile plot
+                # ==========================================================
+
                 fig = plot_stress_profile(
-                    fr, section,
-                    title=(f"{label}: N={N_d/1e3:.0f},"
-                           f" Mx={Mx_d/1e6:.0f},"
-                           f" My={My_d/1e6:.0f} kN*m"))
-                p = os.path.join(outdir, f"state_{label}.png")
-                fig.savefig(p, dpi=150)
+                    fr,
+                    section,
+                    title=(
+                        f"{label}: N={N_d/1e3:.0f},"
+                        f" Mx={Mx_d/1e6:.0f},"
+                        f" My={My_d/1e6:.0f} kN*m"
+                    ),
+                )
+
+                p = os.path.join(
+                    outdir,
+                    f"state_{label}.png",
+                )
+
+                fig.savefig(
+                    p,
+                    dpi=150,
+                )
+
                 plt.close(fig)
-                print(f"    Exported: {p}")
+
+                print(f"  Exported: {p}")
+                
+
             else:
                 print(f"\n  --- {label} --- SOLVER DID NOT CONVERGE")
 
@@ -738,8 +1033,7 @@ def _analyze(args):
     per-material force contributions.  Does **not** generate the
     resistance domain (no NMDiagram, no ConvexHull).
     """
-    outdir = args.output_dir
-    os.makedirs(outdir, exist_ok=True)
+    outdir = _create_timestamped_output_dir(args.output_dir)
 
     print(f"\nLoading: {args.input_file}")
     data = load_yaml(args.input_file)

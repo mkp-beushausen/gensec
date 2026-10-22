@@ -27,6 +27,18 @@ docs/_build/
 results/
 *.png
 !examples/*.png
+fibers_*.csv
+vertices_*.csv
+
+# Temporary files / log files
+*.log
+*.tmp   
+*.bak
+
+#Environment / secrets
+.env
+.env.*
+!.env.example
 
 # OS
 .DS_Store

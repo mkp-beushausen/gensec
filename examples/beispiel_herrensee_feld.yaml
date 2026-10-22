@@ -1,0 +1,527 @@
+materials:
+  conc:
+    #type: concrete
+    #class: C30/37
+    gamma_c: 1.5
+    type: concrete_ec2_nonlinear
+    fc: 42
+    Ecm: 33800
+    eps_c1: -0.0022
+    eps_cu: -0.0035
+    #fct: 1.68
+    #eps_tu: 0.00011
+    #k: 1.9961
+ 
+
+  ps_strand:
+    type: prestressing_steel_ec2  # wahrscheinlich nicht für alte Stähle geeignet -> lassen sich aber implementieren
+    class: St140/160
+    ls: F
+    diagram: inclined 
+    eps_ud_factor: 0.9
+
+  bew_1:
+    type: steel
+    fyk: 390
+    #ftd: 560
+    gamma_s: 1.15
+    Es: 210000
+    k_hardening: 1.0
+    eps_su: 0.01
+    works_in_compression: true 
+
+section:
+  shape: custom
+  params:
+    exterior:
+      - [5212,   0]
+      - [-5212,  0]
+      - [-5212,   -350]
+      - [-2540,   -650]
+      - [-1870,  -1000]
+      - [1870,   -1000]
+      - [2540,   -650]
+      - [5212,   -350]
+  bulk_material: conc
+  mesh_size: 12
+  mesh_method: grid
+  rebars:
+    - {y: -50.0, x: -5072.2, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -4892.4, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -4712.6, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -4532.8, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -4353.0, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -4173.2, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -3993.4, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -3813.6, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -3633.8, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -3454.0, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -3274.2, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -3094.4, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -2914.6, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -2734.8, material: bew_1, diameter: 14}
+    - {y: -50.0, x: -2555.0, material: bew_1, diameter: 14}
+    - {y: -295.7, x: -5100.0, material: bew_1, diameter: 12}
+    - {y: -318.6, x: -4883.3, material: bew_1, diameter: 12}
+    - {y: -341.4, x: -4666.7, material: bew_1, diameter: 12}
+    - {y: -364.3, x: -4450.0, material: bew_1, diameter: 12}
+    - {y: -387.1, x: -4233.3, material: bew_1, diameter: 12}
+    - {y: -410.0, x: -4016.7, material: bew_1, diameter: 12}
+    - {y: -432.9, x: -3800.0, material: bew_1, diameter: 12}
+    - {y: -455.7, x: -3583.3, material: bew_1, diameter: 12}
+    - {y: -478.6, x: -3366.7, material: bew_1, diameter: 12}
+    - {y: -501.4, x: -3150.0, material: bew_1, diameter: 12}
+    - {y: -524.3, x: -2933.3, material: bew_1, diameter: 12}
+    - {y: -547.1, x: -2716.7, material: bew_1, diameter: 12}
+    - {y: -570.0, x: -2500.0, material: bew_1, diameter: 12}
+    - {y: -50.0, x: -2500.0, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -2324.1, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -2148.3, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -1972.4, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -1796.6, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -1620.7, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -1444.8, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -1269.0, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -1093.1, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -917.2, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -741.4, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -565.5, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -389.7, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -213.8, material: bew_1, diameter: 16}
+    - {y: -50.0, x: -37.9, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 137.9, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 313.8, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 489.7, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 665.5, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 841.4, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 1017.2, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 1193.1, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 1369.0, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 1544.8, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 1720.7, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 1896.6, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 2072.4, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 2248.3, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 2424.1, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 2600.0, material: bew_1, diameter: 16}
+    - {y: -560.0, x: -2540.0, material: bew_1, diameter: 16}
+    - {y: -632.0, x: -2400.0, material: bew_1, diameter: 16}
+    - {y: -704.0, x: -2260.0, material: bew_1, diameter: 16}
+    - {y: -776.0, x: -2120.0, material: bew_1, diameter: 16}
+    - {y: -848.0, x: -1980.0, material: bew_1, diameter: 16}
+    - {y: -945.0, x: -1840.0, material: bew_1, diameter: 16}
+    - {y: -560.0, x: 2540.0, material: bew_1, diameter: 16}
+    - {y: -632.0, x: 2400.0, material: bew_1, diameter: 16}
+    - {y: -704.0, x: 2260.0, material: bew_1, diameter: 16}
+    - {y: -776.0, x: 2120.0, material: bew_1, diameter: 16}
+    - {y: -848.0, x: 1980.0, material: bew_1, diameter: 16}
+    - {y: -945.0, x: 1840.0, material: bew_1, diameter: 16}
+    - {y: -50.0, x: 5072.2, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 4892.4, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 4712.6, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 4532.8, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 4353.0, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 4173.2, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 3993.4, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 3813.6, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 3633.8, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 3454.0, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 3274.2, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 3094.4, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 2914.6, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 2734.8, material: bew_1, diameter: 14}
+    - {y: -50.0, x: 2555.0, material: bew_1, diameter: 14}
+    - {y: -295.7, x: 5142.9, material: bew_1, diameter: 12}
+    - {y: -318.6, x: 4931.0, material: bew_1, diameter: 12}
+    - {y: -341.4, x: 4719.0, material: bew_1, diameter: 12}
+    - {y: -364.3, x: 4507.1, material: bew_1, diameter: 12}
+    - {y: -387.1, x: 4295.2, material: bew_1, diameter: 12}
+    - {y: -410.0, x: 4083.3, material: bew_1, diameter: 12}
+    - {y: -432.9, x: 3871.4, material: bew_1, diameter: 12}
+    - {y: -455.7, x: 3659.5, material: bew_1, diameter: 12}
+    - {y: -478.6, x: 3447.6, material: bew_1, diameter: 12}
+    - {y: -501.4, x: 3235.7, material: bew_1, diameter: 12}
+    - {y: -524.3, x: 3023.8, material: bew_1, diameter: 12}
+    - {y: -547.1, x: 2811.9, material: bew_1, diameter: 12}
+    - {y: -570.0, x: 2600.0, material: bew_1, diameter: 12}
+    - {y: -950.0, x: -1800.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -1590.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -1380.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -1170.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -960.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -750.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -540.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -330.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -120.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 90.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 300.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 510.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 720.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 930.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 1140.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 1350.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 1560.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: 1770.0, material: bew_1, diameter: 18}
+    - {y: -950.0, x: -1700.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -1490.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -1280.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -1070.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -860.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -650.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -440.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -230.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: -20.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 190.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 400.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 610.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 820.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 1030.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 1240.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 1450.0, material: bew_1, diameter: 16}
+    - {y: -950.0, x: 1660.0, material: bew_1, diameter: 16}
+
+  tendons:
+    - y: -100.0
+      x: 2480.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -460.0
+      x: 2480.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: 2180.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -584.0
+      x: 2180.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: -2480.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -460.0
+      x: -2480.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: -2180.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -584.0
+      x: -2180.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: 4950.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: 4050.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -350.0
+      x: 4050.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: 3150.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -450.0
+      x: 3150.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: -4950.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: -4050.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -100.0
+      x: -3150.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -430.0
+      x: -3150.0
+      material: ps_strand
+      Ap: 560.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1850.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1715.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1580.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1445.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1310.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1175.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 1040.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1040.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1175.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1310.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1445.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1580.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1715.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -1850.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -905.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -770.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -635.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -500.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -365.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -230.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: -100.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 100.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 230.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 365.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 500.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 635.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 770.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+    - y: -900.0
+      x: 905.0
+      material: ps_strand
+      Ap: 1200.0
+      eps_pe: 0.0035
+      bonded: true
+
+demands:
+  - name: LF1
+    N_kN: 0
+    Mx_kNm: -12498.5
+    My_kNm: 0
+  - name: LF2
+    N_kN: 0
+    Mx_kNm: -16287.5
+    My_kNm: 0
+  - name: LF3
+    N_kN: 0
+    Mx_kNm: -18182.1
+    My_kNm: 0
+  - name: LF4
+    N_kN: 0
+    Mx_kNm: -20076.6
+    My_kNm: 0
+    
+output:
+  eta_norm: false
+  eta_norm_beta: false
+  eta_2D: false
+  generate_mx_my: false
+  generate_3d_surface: false
+  generate_moment_curvature: false
+  generate_polar_ductility: false
+  generate_3d_moment_curvature: false
+  generate_tendon_stress_map: true
+
