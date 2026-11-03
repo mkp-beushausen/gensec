@@ -39,7 +39,7 @@ from .export import (export_nm_domain_csv, export_nm_domain_json,
                     export_moment_curvature_json, 
                     export_moment_curvature_csv,
                     export_mx_my_json, 
-                    export_mx_my_csv,
+                    export_mx_my_csv, export_section_properties_csv
                     )
 
 from .geometry_plot import (
@@ -70,6 +70,7 @@ __all__ = [
     "export_nm_domain_csv", "export_nm_domain_json",
     "export_demand_results_csv", "export_demand_results_json",
     "export_fiber_results_csv",
+    "export_section_properties_csv",
     "export_3d_surface_csv", "export_3d_surface_json",
     "export_verification_json",
     "export_combination_results_json",

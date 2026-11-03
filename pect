@@ -1,0 +1,41 @@
+[35mdocs/changelog.rst[m[36m:[m[32m243[m[36m:[m- New plot/report functions ``plot_[1;31msection_properties[m``,
+[35mdocs/changelog.rst[m[36m:[m[32m244[m[36m:[m  ``print_[1;31msection_properties[m``, ``write_section_report``
+[35mdocs/theory/ideal_gross_properties.rst[m[36m:[m[32m56[m[36m:[m  :func:`~gensec.geometry.properties.compute_[1;31msection_properties[m`.
+[35mdocs/theory/ideal_gross_properties.rst[m[36m:[m[32m243[m[36m:[m   gensec.geometry.properties.compute_[1;31msection_properties[m
+[35mdocs/theory/ideal_gross_properties.rst[m[36m:[m[32m457[m[36m:[m        compute_[1;31msection_properties[m, HomogenizedRebar,
+[35mdocs/theory/ideal_gross_properties.rst[m[36m:[m[32m469[m[36m:[m    props = compute_[1;31msection_properties[m(
+[35mdocs/theory/integration_methods.rst[m[36m:[m[32m110[m[36m:[mcomputation of :func:`compute_[1;31msection_properties[m` (area,
+[35msrc/gensec/api.py[m[36m:[m[32m613[m[36m:[m        properties = _[1;31msection_properties[m_payload(props)
+[35msrc/gensec/api.py[m[36m:[m[32m963[m[36m:[mdef _[1;31msection_properties[m_payload(props) -> SectionPropertiesPayload:
+[35msrc/gensec/geometry/__init__.py[m[36m:[m[32m35[m[36m:[m    compute_[1;31msection_properties[m,
+[35msrc/gensec/geometry/__init__.py[m[36m:[m[32m43[m[36m:[m    "compute_[1;31msection_properties[m",
+[35msrc/gensec/geometry/geometry.py[m[36m:[m[32m914[m[36m:[m            compute_[1;31msection_properties[m, HomogenizedRebar,
+[35msrc/gensec/geometry/geometry.py[m[36m:[m[32m928[m[36m:[m        return compute_[1;31msection_properties[m(
+[35msrc/gensec/geometry/properties.py[m[36m:[m[32m542[m[36m:[mdef compute_[1;31msection_properties[m(
+[35msrc/gensec/output/__init__.py[m[36m:[m[32m46[m[36m:[m    plot_[1;31msection_properties[m,
+[35msrc/gensec/output/__init__.py[m[36m:[m[32m47[m[36m:[m    print_[1;31msection_properties[m,
+[35msrc/gensec/output/__init__.py[m[36m:[m[32m96[m[36m:[m    "plot_[1;31msection_properties[m",
+[35msrc/gensec/output/__init__.py[m[36m:[m[32m97[m[36m:[m    "print_[1;31msection_properties[m",
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m21[m[36m:[m- :func:`plot_[1;31msection_properties[m` — figure with centroid,
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m24[m[36m:[m- :func:`print_[1;31msection_properties[m` — formatted stdout report
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m237[m[36m:[mdef plot_[1;31msection_properties[m(sec, props=None, *,
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m446[m[36m:[mplot_ideal_gross_section = plot_[1;31msection_properties[m
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m468[m[36m:[mdef print_[1;31msection_properties[m(sec, props=None):
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m604[m[36m:[m    file.  Content identical to :func:`print_[1;31msection_properties[m`.
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m616[m[36m:[m        print_[1;31msection_properties[m(sec, props)
+[35msrc/gensec/output/geometry_plot.py[m[36m:[m[32m622[m[36m:[mprint_geometric_properties = print_[1;31msection_properties[m
+[35msrc/gensec/solver/sls.py[m[36m:[m[32m487[m[36m:[m        :func:`~gensec.geometry.properties.compute_[1;31msection_properties[m`.
+[35msrc/gensec/solver/sls.py[m[36m:[m[32m502[m[36m:[m        compute_[1;31msection_properties[m, HomogenizedRebar,
+[35msrc/gensec/solver/sls.py[m[36m:[m[32m530[m[36m:[m    return compute_[1;31msection_properties[m(
+[35mtests/test_properties.py[m[36m:[m[32m26[m[36m:[m    compute_[1;31msection_properties[m,
+[35mtests/test_properties.py[m[36m:[m[32m46[m[36m:[m    s = compute_[1;31msection_properties[m(p, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m85[m[36m:[m    s = compute_[1;31msection_properties[m(p, rebars=rebars,
+[35mtests/test_properties.py[m[36m:[m[32m119[m[36m:[m    s = compute_[1;31msection_properties[m(p, rebars=rebars,
+[35mtests/test_properties.py[m[36m:[m[32m146[m[36m:[m    s1 = compute_[1;31msection_properties[m(p, E_bulk=E, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m147[m[36m:[m    s2 = compute_[1;31msection_properties[m(p, rebars=rebars, E_bulk=E, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m159[m[36m:[m    s = compute_[1;31msection_properties[m(p, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m172[m[36m:[m    s = compute_[1;31msection_properties[m(p, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m205[m[36m:[m    s = compute_[1;31msection_properties[m(p, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m232[m[36m:[m    s = compute_[1;31msection_properties[m(p, compute_plastic=True)
+[35mtests/test_properties.py[m[36m:[m[32m264[m[36m:[m    s = compute_[1;31msection_properties[m(p, rebars=rebars,
+[35mtests/test_properties.py[m[36m:[m[32m291[m[36m:[m    s = compute_[1;31msection_properties[m(p, E_bulk=E_bulk, E_ref=E_ref, compute_plastic=True)

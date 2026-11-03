@@ -49,7 +49,7 @@ from .output import (
     plot_from_json,
     export_nm_domain_csv, export_nm_domain_json,
     export_demand_results_csv, export_demand_results_json,
-    export_fiber_results_csv,
+    export_fiber_results_csv, export_section_properties_csv,
     export_3d_surface_csv, export_3d_surface_json,
     export_verification_json,
     export_combination_results_json,
@@ -1011,6 +1011,11 @@ def _run(args):
             fig.savefig(p, dpi=150)
             plt.close(fig)
             print(f"  Exported: {p}")
+
+    props = section.compute_ideal_properties(compute_plastic = True)
+    p_section_properties = os.path.join(outdir,"section_properties.csv",)
+    export_section_properties_csv(props,p_section_properties,)
+    print(f"  Exported: {p_section_properties}")
 
     # ==============================================================
     #  Final summary

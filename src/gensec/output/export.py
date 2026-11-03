@@ -677,7 +677,127 @@ def export_fiber_results_csv(fiber_results, filepath):
 
             # <<< END NEW
             
+def export_section_properties_csv(props, filepath):
+    """
+    Export already computed GenSec section properties to CSV.
 
+    Parameters
+    ----------
+    props : SectionProperties
+        Result of section.compute_ideal_properties().
+
+    filepath : str
+        Output CSV filepath.
+    """
+    import math
+
+    def format_value(value):
+        if value is None:
+            return ""
+
+        if isinstance(value, bool):
+            return str(value)
+
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+
+        if not math.isfinite(value):
+            return ""
+
+        return f"{value:.10g}"
+
+    properties = [
+        ("# MATERIAL / HOMOGENIZATION", None, None),
+
+        ("E_ref", "E_ref", "MPa"),
+        ("E_bulk", "E_bulk", "MPa"),
+        ("n_bulk", "n_bulk", "-"),
+
+        ("# HOMOGENIZED SECTION", None, None),
+
+        ("A_id", "area", "mm2"),
+        ("Sx", "Sx", "mm3"),
+        ("Sy", "Sy", "mm3"),
+        ("xg", "xg", "mm"),
+        ("yg", "yg", "mm"),
+
+        ("# MOMENTS ABOUT ORIGIN", None, None),
+
+        ("Ixx_origin", "Ixx_o", "mm4"),
+        ("Iyy_origin", "Iyy_o", "mm4"),
+        ("Ixy_origin", "Ixy_o", "mm4"),
+
+        ("# CENTROIDAL MOMENTS OF INERTIA", None, None),
+
+        ("Ix", "Ix", "mm4"),
+        ("Iy", "Iy", "mm4"),
+        ("Ixy", "Ixy", "mm4"),
+
+        ("# PRINCIPAL SYSTEM", None, None),
+
+        ("I_xi", "I_xi", "mm4"),
+        ("I_eta", "I_eta", "mm4"),
+        ("alpha", "alpha", "rad"),
+
+        ("# RADII OF GYRATION", None, None),
+
+        ("rho_x", "rho_x", "mm"),
+        ("rho_y", "rho_y", "mm"),
+        ("rho_xi", "rho_xi", "mm"),
+        ("rho_eta", "rho_eta", "mm"),
+
+        ("# ELASTIC SECTION MODULI", None, None),
+        ("W_x_top", "W_x_top", "mm3"),
+        ("W_x_bot", "W_x_bot", "mm3"),
+        ("W_y_left", "W_y_left", "mm3"),
+        ("W_y_right", "W_y_right", "mm3"),
+        ("W_xi_pos", "W_xi_pos", "mm3"),
+        ("W_xi_neg", "W_xi_neg", "mm3"),
+        ("W_eta_pos", "W_eta_pos", "mm3"),
+        ("W_eta_neg", "W_eta_neg", "mm3"),
+        
+        ("# PLASTIC SECTION MODULI", None, None),
+        ("Z_x", "Z_x", "mm3"),
+        ("Z_y", "Z_y", "mm3"),
+        ("Z_xi", "Z_xi", "mm3"),
+        ("Z_eta", "Z_eta", "mm3"),
+        ("# ADDITIONAL INFORMATION", None, None),
+        ("is_convex", "is_convex", "-"),
+    ]
+    with open(
+        filepath,
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+        w = csv.writer(f)
+        w.writerow([
+            "property",
+            "value",
+            "unit",
+        ])
+        for label, attribute, unit in properties:
+            # Section heading
+            if attribute is None:
+                w.writerow([])
+                w.writerow([label])
+                continue
+            # Allows compatibility if a property is absent
+            if not hasattr(props, attribute):
+                continue
+            value = getattr(props,attribute,)
+            w.writerow([label,format_value(value),unit,])
+        # Principal-axis angle additionally in degrees
+        if hasattr(props, "alpha"):
+            alpha = getattr(props,"alpha", )
+            try:
+                alpha = float(alpha)
+                if math.isfinite(alpha):
+                    w.writerow(["alpha_deg",format_value(math.degrees(alpha)),"deg",])
+            except (TypeError, ValueError):
+                pass
 
 def export_3d_surface_csv(nm_3d, filepath):
     """

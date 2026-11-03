@@ -11,7 +11,7 @@ build/
 venv/
 
 # uv
-uv.lock
+# uv.lock
 
 # IDE
 .vscode/

@@ -115,7 +115,7 @@ _MATERIAL_BUILDERS = {
     },
     "concrete_ec2_nonlinear": {
         "cls": ConcreteEC2Nonlinear,
-        "params": ["fc", "Ecm", "eps_c1", "eps_cu", "k", "fct", "Et", "eps_tu", "name"],
+        "params": ["fc", "Ecm", "eps_c1", "eps_cu", "k", "fct", "eps_cr", "n_tension", "name"],
     },
     "steel": {
         "cls": Steel,

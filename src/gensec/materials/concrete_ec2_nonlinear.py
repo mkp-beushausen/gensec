@@ -135,8 +135,8 @@ class ConcreteEC2Nonlinear(Material):
         eps_cu,
         k=None,
         fct=0.0,
-        Et=None,
-        eps_tu=None,
+        eps_cr=None,
+        n_tension=None,
         name="ConcreteEC2Nonlinear",
     ):
         # ==========================================================
@@ -145,6 +145,7 @@ class ConcreteEC2Nonlinear(Material):
 
         self.fc = abs(float(fc))
         self.Ecm = float(Ecm)
+        self.E = self.Ecm
 
         # GenSec sign convention:
         # compression is negative
@@ -157,7 +158,7 @@ class ConcreteEC2Nonlinear(Material):
 
         if k is None:
             self.k = (
-                1.10
+                1.05
                 * self.Ecm
                 * abs(self.eps_c1)
                 / self.fc
@@ -165,26 +166,28 @@ class ConcreteEC2Nonlinear(Material):
         else:
             self.k = float(k)
 
-        # ==========================================================
-        # Tension parameters
-        # ==========================================================
+        # ------------------------------------------------------
+        # Tension according to Quast
+        # ------------------------------------------------------
 
-        self.fct = max(0.0, float(fct))
+        self.fct = max(
+            0.0,
+            float(fct),
+        )
 
-        if Et is None:
-            self.Et = self.Ecm
-        else:
-            self.Et = float(Et)
-
-        if self.fct > 0.0:
-            self.eps_cr = self.fct / self.Et
-        else:
+        if eps_cr is None:
             self.eps_cr = 0.0
-
-        if eps_tu is None:
-            self.eps_tu = None
         else:
-            self.eps_tu = abs(float(eps_tu))
+            self.eps_cr = abs(
+                float(eps_cr)
+            )
+
+        if n_tension is None:
+            self.n_tension = 2.0
+        else:
+            self.n_tension = float(
+                n_tension
+            )
 
         self._name = str(name)
 
@@ -218,26 +221,15 @@ class ConcreteEC2Nonlinear(Material):
                 "k must be greater than zero."
             )
 
-        if self.Et <= 0.0:
-            raise ValueError(
-                "Et must be greater than zero."
-            )
-
-        if (
-            self.eps_tu is not None
-            and self.fct <= 0.0
-        ):
-            raise ValueError(
-                "eps_tu can only be used if fct > 0."
-            )
-
-        if (
-            self.eps_tu is not None
-            and self.eps_tu <= self.eps_cr
-        ):
-            raise ValueError(
-                "eps_tu must be greater than eps_cr = fct / Et."
-            )
+        if self.fct > 0.0:
+            if self.eps_cr <= 0.0:
+                raise ValueError(
+                    "eps_cr must be greater than zero if fct > 0."
+                )
+            if self.n_tension <= 0.0:
+                raise ValueError(
+                    "n_tension must be greater than zero if fct > 0."
+                )
 
         # ==========================================================
         # Precomputed values
@@ -250,17 +242,6 @@ class ConcreteEC2Nonlinear(Material):
             )
         )
 
-        # Tangent modulus for linear tensile softening
-        if self.eps_tu is not None:
-            self._Et_softening = (
-                -self.fct
-                / (
-                    self.eps_tu
-                    - self.eps_cr
-                )
-            )
-        else:
-            self._Et_softening = 0.0
 
     # ==============================================================
     # Properties required by GenSec
@@ -407,75 +388,47 @@ class ConcreteEC2Nonlinear(Material):
 
     def _stress_tension(self, eps):
         """
-        Scalar tensile stress.
-
-        Parameters
-        ----------
-        eps : float
-            Positive tensile strain.
-
-        Returns
-        -------
-        float
-            Tensile stress [MPa].
+        Concrete tension branch according to Quast.
+        For:
+            0 <= eps < eps_cr
+        sigma = fct * [
+            1 - (1 - eps / eps_cr)**n_tension
+        ]
+        For:
+            eps >= eps_cr
+        sigma = fct
+        Notes
+        -----
+        This is the unscaled parabola-rectangle target curve.
+        A strain-dependent VMB reduction is not applied here.
         """
-
+        eps = float(eps)
         # Tension disabled
         if self.fct <= 0.0:
             return 0.0
-
-        # Linear elastic tensile branch
-        if eps <= self.eps_cr:
-            return self.Et * eps
-
-        # Brittle cracking:
-        # stress drops directly to zero
-        if self.eps_tu is None:
+        # Origin
+        if eps <= 0.0:
             return 0.0
-
-        # Linear tensile softening
-        if eps <= self.eps_tu:
-            return self.fct * (
-                self.eps_tu - eps
-            ) / (
-                self.eps_tu - self.eps_cr
-            )
-
-        # Fully cracked
-        return 0.0
+        # Parabolic branch
+        if eps < self.eps_cr:
+            eta = ( eps/ self.eps_cr)
+            return (self.fct* (1.0-(1.0 - eta)** self.n_tension))
+        # Rectangle branch
+        return self.fct
 
     def _tangent_tension(self, eps):
         """
-        Scalar tangent modulus in tension.
-
-        Parameters
-        ----------
-        eps : float
-            Positive tensile strain.
-
-        Returns
-        -------
-        float
-            Tangent modulus [MPa].
+        Tangent modulus of the Quast tension branch.
         """
-
-        # Tension disabled
+        eps = float(eps)
         if self.fct <= 0.0:
             return 0.0
-
-        # Linear elastic tensile branch
-        if eps <= self.eps_cr:
-            return self.Et
-
-        # Brittle cracking
-        if self.eps_tu is None:
+        if eps < 0.0:
             return 0.0
-
-        # Linear softening
-        if eps <= self.eps_tu:
-            return self._Et_softening
-
-        # Fully cracked
+        if eps < self.eps_cr:
+            eta = (eps/ self.eps_cr)
+            return (self.fct* self.n_tension/ self.eps_cr* (1.0 - eta)** (self.n_tension - 1.0))
+        # Rectangle branch
         return 0.0
 
     # ==============================================================
@@ -614,53 +567,24 @@ class ConcreteEC2Nonlinear(Material):
                 )
             )
 
-        # ----------------------------------------------------------
-        # Linear elastic tensile branch
-        # ----------------------------------------------------------
+        # ==========================================================
+        # TENSION ACCORDING TO QUAST
+        # ==========================================================
 
         if self.fct > 0.0:
-            tension_elastic = (
-                (eps >= 0.0)
-                &
-                (eps <= self.eps_cr)
-            )
-
-            sigma[tension_elastic] = (
-                self.Et
-                * eps[tension_elastic]
-            )
-
-        # ----------------------------------------------------------
-        # Tensile softening
-        # ----------------------------------------------------------
-
-        if (
-            self.fct > 0.0
-            and self.eps_tu is not None
-        ):
-            tension_softening = (
-                (eps > self.eps_cr)
-                &
-                (eps <= self.eps_tu)
-            )
-
-            sigma[tension_softening] = (
-                self.fct
-                * (
-                    self.eps_tu
-                    - eps[tension_softening]
-                )
-                / (
-                    self.eps_tu
-                    - self.eps_cr
-                )
-            )
-
-        # For brittle cracking:
-        # eps > eps_cr remains zero.
-        #
-        # After softening:
-        # eps > eps_tu remains zero.
+            # ------------------------------------------------------
+            # Parabolic tension branch
+            # ------------------------------------------------------
+            tension_parabola = ((eps >= 0.0)& (eps < self.eps_cr))
+            if np.any(tension_parabola):
+                eta = (eps[tension_parabola]/ self.eps_cr)
+                sigma[tension_parabola] = (
+                    self.fct* (1.0-(1.0 - eta)** self.n_tension))
+            # ------------------------------------------------------
+            # Rectangle branch
+            # ------------------------------------------------------
+            tension_plateau = (eps >= self.eps_cr)
+            sigma[tension_plateau] = (self.fct)
 
         return sigma
 
@@ -671,68 +595,57 @@ class ConcreteEC2Nonlinear(Material):
         Accepts NumPy arrays of any shape.
         """
 
-        eps = np.asarray(
-            eps,
-            dtype=float,
-        )
-
-        tangent = np.zeros_like(
-            eps,
-            dtype=float,
-        )
-
+        eps = np.asarray(eps,dtype=float,)
+        tangent = np.zeros_like(eps,dtype=float,)
         # ----------------------------------------------------------
         # Nonlinear compression branch
         # ----------------------------------------------------------
-
         compression_nonlinear = (
             (eps > self.eps_cu)
             &
             (eps < 0.0)
         )
-
         if np.any(compression_nonlinear):
             tangent[compression_nonlinear] = (
                 self._tangent_compression(
-                    eps[compression_nonlinear]
-                )
-            )
+                    eps[compression_nonlinear]))
 
         # Compression plateau:
         #
         # eps <= eps_cu
         # tangent remains zero.
 
-        # ----------------------------------------------------------
-        # Linear elastic tensile branch
-        # ----------------------------------------------------------
+        # ==========================================================
+        # TENSION ACCORDING TO QUAST
+        # ==========================================================
 
         if self.fct > 0.0:
-            tension_elastic = (
+
+            tension_parabola = (
                 (eps >= 0.0)
                 &
-                (eps <= self.eps_cr)
+                (eps < self.eps_cr)
             )
 
-            tangent[tension_elastic] = self.Et
+            if np.any(tension_parabola):
 
-        # ----------------------------------------------------------
-        # Tensile softening
-        # ----------------------------------------------------------
+                eta = (
+                    eps[tension_parabola]
+                    / self.eps_cr
+                )
 
-        if (
-            self.fct > 0.0
-            and self.eps_tu is not None
-        ):
-            tension_softening = (
-                (eps > self.eps_cr)
-                &
-                (eps <= self.eps_tu)
-            )
+                tangent[tension_parabola] = (
+                    self.fct
+                    * self.n_tension
+                    / self.eps_cr
+                    * (1.0 - eta)
+                    ** (self.n_tension - 1.0)
+                )
 
-            tangent[tension_softening] = (
-                self._Et_softening
-            )
+            # eps >= eps_cr:
+            #
+            # tangent remains zero because
+            # sigma = fct = constant
 
         return tangent
 
@@ -749,9 +662,10 @@ class ConcreteEC2Nonlinear(Material):
             f"eps_cu={self.eps_cu:g}, "
             f"k={self.k:g}, "
             f"fct={self.fct:g}, "
-            f"Et={self.Et:g}, "
+            #f"Et={self.Et:g}, "
             f"eps_cr={self.eps_cr:g}, "
-            f"eps_tu={self.eps_tu!r}, "
+            f"n_tension={self.n_tension:g}, "
+            #f"eps_tu={self.eps_tu!r}, "
             f"sigma_cu={self._sigma_cu:g}, "
             f"name={self.name!r}"
             f")"
