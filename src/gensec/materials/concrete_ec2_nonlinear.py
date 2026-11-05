@@ -158,7 +158,7 @@ class ConcreteEC2Nonlinear(Material):
 
         if k is None:
             self.k = (
-                1.05
+                1.10
                 * self.Ecm
                 * abs(self.eps_c1)
                 / self.fc
@@ -183,7 +183,7 @@ class ConcreteEC2Nonlinear(Material):
             )
 
         if n_tension is None:
-            self.n_tension = 2.0
+            self.n_tension = self.k
         else:
             self.n_tension = float(
                 n_tension
@@ -392,7 +392,7 @@ class ConcreteEC2Nonlinear(Material):
         For:
             0 <= eps < eps_cr
         sigma = fct * [
-            1 - (1 - eps / eps_cr)**n_tension
+            1 - (1 - eps / eps_cr)**k oder **n_tension    k kann vom Druckbereich übernommen werden, da nach den selben Vorschriften berechnet
         ]
         For:
             eps >= eps_cr
@@ -418,7 +418,7 @@ class ConcreteEC2Nonlinear(Material):
 
     def _tangent_tension(self, eps):
         """
-        Tangent modulus of the Quast tension branch.
+        Tangent modulus of the Quast tension branch according to n_tension.
         """
         eps = float(eps)
         if self.fct <= 0.0:

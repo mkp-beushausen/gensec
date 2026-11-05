@@ -1,7 +1,7 @@
 import numpy as np
 
-#from gensec.materials import ConcreteEC2Nonlinear
-from gensec.materials.ec2_bridge import prestress_from_class
+from gensec.materials import ConcreteEC2Nonlinear
+#from gensec.materials.ec2_bridge import prestress_from_class
 
 
 
@@ -10,26 +10,26 @@ from gensec.materials.ec2_bridge import prestress_from_class
 # Material
 # ----------------------------------------------------------
 
-""" mat = ConcreteEC2Nonlinear(
+mat = ConcreteEC2Nonlinear(
     fc=42,
     Ecm=33800,
     eps_c1=-0.0022,
     eps_cu=-0.0035,
     fct=1.68,
     eps_cr=0.00011,
-    n_tension=1.9961,
+    #n_tension=1.9961,
     #eps_tu=0.00011,
     #k=1.9961
-) """
+)
 
-mat=prestress_from_class(
+""" mat=prestress_from_class(
     ps_class="St140/160",
     ls="F",
     NA="EC2",
     eps_ud_factor=0.9,
     diagram="inclined",
     works_in_compression=True,
-)
+) """
 
 # ----------------------------------------------------------
 # Dehnungsbereich
@@ -37,7 +37,7 @@ mat=prestress_from_class(
 # von -3.7 mm/m bis 0.0 mm/m
 # 66 Werte
 
-eps_mm_m = np.linspace(-25, 25,150)
+eps_mm_m = np.linspace(-0.05, 0.05,50)
 
 # GenSec benötigt dimensionslose Dehnung
 eps = eps_mm_m / 1000.0
@@ -51,7 +51,7 @@ sigma = mat.stress_array(eps)
 Et = mat.tangent_array(eps)
 
 
-# ----------------------------------------------------------
+""" # ----------------------------------------------------------
 # Wertetabelle ausgeben
 # ----------------------------------------------------------
 print()
@@ -81,10 +81,12 @@ print(
     f"{mat.ec2.sigma_ud_inclined:.4f} MPa"
 )
 
-print()
+print() """
 
 
 print()
+print(f"Faktor k = {mat.k}")
+print(f"n_tension = {mat.n_tension}")
 print(" Nr. | eps [mm/m] | sigma [N/mm²] | Et [N/mm²]")
 print("----------------------------------------------------")
 
