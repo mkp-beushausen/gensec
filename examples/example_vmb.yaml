@@ -1,0 +1,99 @@
+# ================================================================
+#  GenSec v0.3.0 — biaxial column with auto N-levels
+# ================================================================
+#
+#  Demonstrates the ``n_levels_mode: auto`` strategy: the
+#  ``n_levels_count`` axial values are sampled by linspace between
+#  N_Rd,min and N_Rd,max of the resistance domain.  Use this when
+#  the demands span only a narrow N range but a full sweep of
+#  Mx-My contours and M-χ diagrams is desired.
+# ================================================================
+
+materials:
+  conc:
+    #type: concrete
+    #class: C30/37
+    gamma_c: 1.5
+    type: concrete_ec2_nonlinear
+    fc: 42
+    Ecm: 33800
+    eps_c1: -0.0022
+    eps_cu: -0.0035
+    fct: 1.68
+    eps_cr: 0.00011
+    use_vmb: false
+    eps_vmb_u: 0.0025
+    n_vmb: 2
+   
+
+  steel_1:
+    type: steel
+    fyk: 500.0
+    gamma_s: 1.15
+    Es: 200000
+    k_hardening: 1.0
+    eps_su: 0.01
+    works_in_compression: true
+
+  ps_strand:
+    type: prestressing_steel_ec2
+    class: St1570/1770 
+    ls: F
+    diagram: inclined     # or 'horizontal'
+    eps_ud_factor: 0.9  # default, EC2 §3.3.6(7)
+
+
+section:
+  B: 400
+  H: 800
+  bulk_material: conc
+  n_fibers_y: 80
+  n_fibers_x: 40
+  rebars:
+    - {y: 40,  x: 50,  As: 490.87, material: steel_1, diameter: 25}
+    - {y: 40,  x: 350, As: 490.87, material: steel_1, diameter: 25}
+    - {y: 760, x: 50,  As: 490.87, material: steel_1, diameter: 25}
+    - {y: 760, x: 350, As: 490.87, material: steel_1, diameter: 25}
+    # - {y: 40,  x: 200, As: 314.16, material: steel_1, diameter: 20}
+    # - {y: 560, x: 200, As: 314.16, material: steel_1, diameter: 20}
+    # - {y: 300, x: 50,  As: 314.16, material: steel_1, diameter: 20}
+    # - {y: 300, x: 350, As: 314.16, material: steel_1, diameter: 20}
+  
+  # Prestressing tendons (Phase 1: bonded).
+  tendons:
+    - y: 150          # eccentric, below centroid (yc = 400)
+      x: 200          # centred in x
+      material: ps_strand
+      Ap: 500        # mm^2  (e.g. 10 strands * 140 mm^2)
+      eps_pe: 0.0065  # effective prestrain after losses (tension +), nicht in Promille?!
+      bonded: true    # Phase 1 supports bonded only
+
+# TODO: investigate mx_chi @  Nm3649, Nm5285, mx_my @N1260, and other things
+
+demands:
+  - name: Gravity
+    N_kN: 0
+    Mx_kNm: -685
+    My_kNm: -5
+  # - name: Seismic_x
+  #   N_kN: -1200
+  #   Mx_kNm: 350
+  #   My_kNm: 0
+  # - name: Seismic_biax
+  #   N_kN: -1500
+  #   Mx_kNm: 200
+  #   My_kNm: 100
+
+output:
+  # v0.3.0 utilization flags.
+  eta_norm: false               # principal 3-D linear-distance metric
+  eta_norm_beta: false          # composite ratio (cross-software comparison)
+  eta_2D: false                 # Mx-My ray at fixed N (biaxial only)
+  generate_mx_my: false
+  generate_3d_surface: false
+  n_levels_mode: auto          # linspace between N_Rd,min and N_Rd,max
+  n_levels_count: 5
+  n_angles_mx_my: 144
+  generate_moment_curvature: false
+  generate_polar_ductility: false
+  generate_3d_moment_curvature: false

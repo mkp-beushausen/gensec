@@ -366,6 +366,19 @@ def export_fiber_results_csv(fiber_results, filepath):
             w.writerow(row)
 
         w.writerow([])
+        vmb_data = fiber_results.get("quast_vmb", {})
+
+        if vmb_data:
+            vmb = float(
+                next(iter(vmb_data.values()))["vmb"]
+            )
+        else:
+            vmb = 1.0
+    
+        w.writerow([])
+        w.writerow(["VMB", f"{vmb:.6f}"])
+
+        w.writerow([])
 
         # ==========================================================
         # REBAR LAYERS

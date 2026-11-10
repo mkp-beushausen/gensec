@@ -343,7 +343,6 @@ class Steel(Material):
         E_hard = ((self.ftd - self.fyd)
                   / (self.eps_su - self.eps_yd)
                   if self.eps_su > self.eps_yd else 0.0)
-
         # Tension or symmetric compression
         if self.works_in_compression:
             m_e = ea <= self.eps_yd
@@ -424,7 +423,8 @@ def _pssteel_stress_kernel(eps_flat, Ep, eps_el, sig_el, eps_ud,
             if ea <= eps_el:
                 out[i] = Ep * e
             elif ea <= eps_ud:
-                out[i] = -(sig_el + E_hard * (ea - eps_el))
+                #out[i] = -(sig_el + E_hard * (ea - eps_el))
+                out[i] = -sig_el
             # else: 0
     return out
 
@@ -457,16 +457,36 @@ def _pssteel_tangent_kernel(eps_flat, Ep, eps_el, eps_ud,
     numpy.ndarray
         1-D tangent-modulus array [MPa].
     """
-    out = np.zeros(eps_flat.shape[0], dtype=np.float64)
-    for i in range(eps_flat.shape[0]):
+    # out = np.zeros(eps_flat.shape[0], dtype=np.float64)
+    # for i in range(eps_flat.shape[0]):
+    #     e = eps_flat[i]
+    #     ea = abs(e)
+    #     if e >= 0.0 or works_in_compression:
+    #         if ea <= eps_el:
+    #             out[i] = Ep
+    #         elif ea <= eps_ud:
+    #             out[i] = E_hard
+    # return out
+    Et = np.zeros_like(eps_flat)
+    for i in range(eps_flat.size):
         e = eps_flat[i]
-        ea = abs(e)
-        if e >= 0.0 or works_in_compression:
+        # ----------------------------------------------
+        # Tension
+        # ----------------------------------------------
+        if e >= 0.0:
+            if e <= eps_el:
+                Et[i] = Ep
+            elif e <= eps_ud:
+                Et[i] = E_hard
+        # ----------------------------------------------
+        # Compression
+        # ----------------------------------------------
+        elif works_in_compression:
+            ea = -e
             if ea <= eps_el:
-                out[i] = Ep
-            elif ea <= eps_ud:
-                out[i] = E_hard
-    return out
+                Et[i] = Ep
+            # second compression branch stays zero
+    return Et
 
 
 @dataclass
@@ -640,7 +660,8 @@ class PrestressingSteel(Material):
         if ea <= self.eps_el:
             return self.Ep * eps
         if ea <= self.eps_ud:
-            return -(self.f_p01d + self.E_hard * (ea - self.eps_el))
+            #return -(self.f_p01d + self.E_hard * (ea - self.eps_el))
+            return -self.f_p01d
         return 0.0
 
     def tangent(self, eps):
@@ -651,12 +672,25 @@ class PrestressingSteel(Material):
         -------
         float
         """
-        ea = abs(eps)
-        if eps >= 0.0 or self.works_in_compression:
-            if ea <= self.eps_el:
+        # if eps >= 0.0 or self.works_in_compression:
+        #     if ea <= self.eps_el:
+        #         return self.Ep
+        #     if ea <= self.eps_ud:
+        #         return self.E_hard
+        # return 0.0
+
+        if eps >= 0.0:
+            if eps <= self.eps_el:
                 return self.Ep
-            if ea <= self.eps_ud:
+            elif eps <= self.eps_ud:
                 return self.E_hard
+        if not self.works_in_compression:
+            return 0.0
+        ea = -eps
+        if ea <= self.eps_el:
+            return self.Ep
+        if ea <= self.eps_ud:
+            return 0.0
         return 0.0
 
     # ------------------------------------------------------------------
@@ -687,20 +721,49 @@ class PrestressingSteel(Material):
                 self.E_hard, self.works_in_compression,
             ).reshape(eps.shape)
 
-        sigma = np.zeros_like(eps, dtype=np.float64)
+        # sigma = np.zeros_like(eps, dtype=np.float64)
+        # ea = np.abs(eps)
+        # sign = np.sign(eps)
+
+        # if self.works_in_compression:
+        #     m_e = ea <= self.eps_el
+        #     m_p = (ea > self.eps_el) & (ea <= self.eps_ud)
+        # else:
+        #     m_e = (eps >= 0) & (ea <= self.eps_el)
+        #     m_p = (eps >= 0) & (ea > self.eps_el) & (ea <= self.eps_ud)
+
+        # sigma[m_e] = self.Ep * eps[m_e]
+        # sigma[m_p] = sign[m_p] * (self.f_p01d + self.E_hard * (ea[m_p] - self.eps_el))
+        eps = np.asarray(eps, dtype=np.float64)
+        sigma = np.zeros_like(eps)
+
         ea = np.abs(eps)
-        sign = np.sign(eps)
 
-        if self.works_in_compression:
-            m_e = ea <= self.eps_el
-            m_p = (ea > self.eps_el) & (ea <= self.eps_ud)
-        else:
-            m_e = (eps >= 0) & (ea <= self.eps_el)
-            m_p = (eps >= 0) & (ea > self.eps_el) & (ea <= self.eps_ud)
-
+        # Elastic branch
+        m_e = (
+            (ea <= self.eps_el)
+            & (
+                (eps >= 0.0)
+                | self.works_in_compression))
+        # Second tension branch
+        m_t = (
+            (eps > self.eps_el)
+            & (eps <= self.eps_ud)
+        )
         sigma[m_e] = self.Ep * eps[m_e]
-        sigma[m_p] = sign[m_p] * (
-            self.f_p01d + self.E_hard * (ea[m_p] - self.eps_el))
+        sigma[m_t] = (
+            self.f_p01d
+            + self.E_hard
+            * (eps[m_t] - self.eps_el)
+        )
+        # Horizontal second compression branch
+        if self.works_in_compression:
+            m_c = (
+                (eps < -self.eps_el)
+                & (eps >= -self.eps_ud)
+            )
+            sigma[m_c] = -self.f_p01d
+
         return sigma
 
     def tangent_array(self, eps):
@@ -723,14 +786,26 @@ class PrestressingSteel(Material):
                 self.E_hard, self.works_in_compression,
             ).reshape(eps.shape)
 
-        Et = np.zeros_like(eps, dtype=np.float64)
+        # Et = np.zeros_like(eps, dtype=np.float64)
+        # ea = np.abs(eps)
+        # if self.works_in_compression:
+        #     m_e = ea <= self.eps_el
+        #     m_p = (ea > self.eps_el) & (ea <= self.eps_ud)
+        # else:
+        #     m_e = (eps >= 0) & (ea <= self.eps_el)
+        #     m_p = (eps >= 0) & (ea > self.eps_el) & (ea <= self.eps_ud)
+        # Et[m_e] = self.Ep
+        # Et[m_p] = self.E_hard
+
+        eps = np.asarray(eps, dtype=np.float64)
+        Et = np.zeros_like(eps)
         ea = np.abs(eps)
-        if self.works_in_compression:
-            m_e = ea <= self.eps_el
-            m_p = (ea > self.eps_el) & (ea <= self.eps_ud)
-        else:
-            m_e = (eps >= 0) & (ea <= self.eps_el)
-            m_p = (eps >= 0) & (ea > self.eps_el) & (ea <= self.eps_ud)
+        # Elastic branch
+        m_e = ((ea <= self.eps_el) & ((eps >= 0.0)| self.works_in_compression))
+        # Second tension branch
+        m_t = ((eps > self.eps_el)& (eps <= self.eps_ud))
         Et[m_e] = self.Ep
-        Et[m_p] = self.E_hard
+        Et[m_t] = self.E_hard
+        # Second compression branch remains zero automatically
         return Et
+        #return Et

@@ -503,6 +503,8 @@ def _run(args):
                 print(f"\n  --- {label} ---")
                 print_fiber_results(fr, section)
 
+
+
                 # ==========================================================
                 # Existing fiber CSV export
                 # ==========================================================
@@ -546,6 +548,25 @@ def _run(args):
 
                 material = section.bulk_material
 
+                # ----------------------------------------------------------
+                # Quast-VMB-Zustand fuer die Vertex-Auswertung
+                # ----------------------------------------------------------
+
+                _, eps_rebar = solver.strain_field(
+                    eps0,
+                    chi_x,
+                    chi_y,
+                )
+
+                quast_state = solver._compute_quast_state(
+                    eps_rebar=eps_rebar,
+                    bulk_material=material,
+                )
+
+                vmb = float(
+                    quast_state["vmb"]
+                )
+
                 for i, (x, y) in enumerate(
                     vertices,
                     start=1,
@@ -564,15 +585,36 @@ def _run(args):
                         - chi_y * lx
                     )
 
-                    # Material response at the actual polygon vertex
-                    sigma = float(
+                    sigma_target = float(
                         material.stress(eps)
                     )
 
-                    tangent = float(
+                    tangent_target = float(
                         material.tangent(eps)
                     )
 
+                    # Quast-VMB wirkt nur auf Betonzug
+                    if (
+                        getattr(
+                            material,
+                            "use_vmb",
+                            False,
+                        )
+                        and eps > 0.0
+                    ):
+                        sigma = (
+                            sigma_target
+                            * vmb
+                        )
+
+                        tangent = (
+                            tangent_target
+                            * vmb
+                        )
+
+                    else:
+                        sigma = sigma_target
+                        tangent = tangent_target
                     vertex_results.append({
                         "vertex": i,
                         "x_mm": x,

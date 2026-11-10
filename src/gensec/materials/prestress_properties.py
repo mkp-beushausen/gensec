@@ -273,7 +273,7 @@ class fbpren:
     """
 
     def __init__(self, f_p01k, f_pk, eps_uk, Ep=195000.0,
-                 ls='F', NA='EC2', eps_ud_factor=0.9,
+                 ls='F', NA='EC2', eps_ud_factor=0.9, eps_ud=None,
                  gamma_s_override=None,
                  relaxation_class=None, rho_1000=None):
         self.f_p01k = float(f_p01k)
@@ -293,13 +293,22 @@ class fbpren:
 
         # Strains.
         self.eps_el = self.f_p01d / self.Ep
-        self.eps_ud = eps_ud_factor * self.eps_uk
+        self.eps_ud_factor = float(eps_ud_factor)
+        self.eps_ud_ec2 = (self.eps_ud_factor* self.eps_uk)
+        if eps_ud is None:
+            self.eps_ud = self.eps_ud_ec2
+            self.eps_ud_explicit = False
+        else:
+            self.eps_ud = float(eps_ud)
+            self.eps_ud_explicit = True
+            if self.eps_ud <= 0.0:
+                raise ValueError("eps_ud must be greater than zero.")
 
         # Inclined design branch endpoint stress evaluated at eps_ud.
         # The EC2 inclined branch runs from (eps_el, f_p01d) to
         # (eps_uk, f_pd); we report its value at eps_ud so the bridge
         # can build either the horizontal or the inclined diagram.
-        denom = self.eps_uk - self.eps_el
+        denom = self.eps_ud - self.eps_el   # eigentlich mit eps_uk, geändert/Änderung
         if denom > 0.0:
             slope = (self.f_pd - self.f_p01d) / denom
             self.sigma_ud_inclined = (
@@ -366,7 +375,7 @@ PrestressClassData: Dict[str, _PSClass] = {
                         Ep=195000.0, kind="strand"),
     "Y1960S7": _PSClass(f_p01k=1680.0, f_pk=1960.0, eps_uk=0.035,
                         Ep=195000.0, kind="strand"),
-    "St1570/1770": _PSClass(f_p01k=1570.0, f_pk=1770.0, eps_uk=0.035,
+    "St1570/1770": _PSClass(f_p01k=1500.0, f_pk=1770.0, eps_uk=0.035,
                             Ep=195000.0, kind="strand"),
     "St140/160": _PSClass(f_p01k=1370.0, f_pk=1570.0, eps_uk=0.035,
                             Ep=201105.0, kind="strand"),

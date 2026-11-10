@@ -425,9 +425,409 @@ class FiberSolver:
         er = eps0 + chi_x * self._ly_rebar - chi_y * self._lx_rebar
         return eb, er
 
+    def _quast_vmb_from_reference_strain(
+        self,
+        bulk_material,
+        eps_c_ref,
+    ):
+        """
+        Compute Quast VMB and its analytical derivative.
+
+        Parameters
+        ----------
+        bulk_material : Material
+            Concrete material containing:
+                eps_cr
+                eps_vmb_u
+                n_vmb
+                use_vmb
+
+        eps_c_ref : float
+            Concrete strain at the position of the governing
+            reinforcing-steel fiber.
+
+            Positive strain = tension.
+
+        Returns
+        -------
+        vmb : float
+            Reduction factor in [0, 1].
+
+        dvmb_deps_ref : float
+            Analytical derivative of VMB with respect to eps_c_ref.
+        """
+
+        # ------------------------------------------------------
+        # VMB disabled
+        # ------------------------------------------------------
+
+        if not getattr(
+            bulk_material,
+            "use_vmb",
+            False,
+        ):
+            return 1.0, 0.0
+
+        eps_cr = float(
+            bulk_material.eps_cr
+        )
+
+        eps_u = float(
+            bulk_material.eps_vmb_u
+        )
+
+        n_vmb = float(
+            bulk_material.n_vmb
+        )
+
+        eps_c_ref = float(
+            eps_c_ref
+        )
+
+        # ------------------------------------------------------
+        # Before cracking
+        # ------------------------------------------------------
+
+        if eps_c_ref <= eps_cr:
+            return 1.0, 0.0
+
+        # ------------------------------------------------------
+        # End of tension stiffening
+        # ------------------------------------------------------
+
+        if eps_c_ref >= eps_u:
+            return 0.0, 0.0
+
+        # ------------------------------------------------------
+        # Quast transition region
+        # ------------------------------------------------------
+
+        ratio = (
+            (eps_u - eps_c_ref)
+            / (eps_u - eps_cr)
+        )
+
+        ratio = float(
+            np.clip(
+                ratio,
+                0.0,
+                1.0,
+            )
+        )
+
+        vmb = (
+            ratio ** n_vmb
+        )
+
+        dvmb_deps_ref = (
+            -n_vmb
+            / (eps_u - eps_cr)
+            * ratio ** (
+                n_vmb - 1.0
+            )
+        )
+
+        return (
+            float(vmb),
+            float(dvmb_deps_ref),
+        )
+
+    def _compute_quast_state(
+        self,
+        eps_rebar,
+        bulk_material=None,):
+        """
+        Determine the complete Quast VMB state.
+
+        The most strongly tensioned embedded reinforcing-steel fiber
+        of the considered concrete material determines the reference
+        position.
+
+        VMB itself is calculated from the concrete strain at exactly
+        this reinforcement position.
+        """
+
+        if bulk_material is None:
+            bulk_material = self.sec.bulk_material
+
+        default_state = {
+            "vmb": 1.0,
+            "dvmb_deps_ref": 0.0,
+            "eps_c_ref": 0.0,
+            "governing_index": None,
+        }
+
+        if not getattr(
+                bulk_material,
+                "use_vmb",
+                False):
+            return default_state
+
+        eps_rebar = np.asarray(
+            eps_rebar,
+            dtype=float,
+        )
+
+        if eps_rebar.size == 0:
+            return default_state
+
+        embedded = np.asarray(
+            self.sec.embedded_rebars,
+            dtype=bool,
+        )
+
+        governing_index = None
+        governing_steel_strain = -np.inf
+
+        # ==========================================================
+        # 1. Maßgebende Zugbewehrung im GESAMTEN Querschnitt suchen
+        # ==========================================================
+
+        for (
+            rebar_material,
+            zone_bulk_material,
+            idx,
+        ) in self._rebar_groups:
+
+            if zone_bulk_material is not bulk_material:
+                continue
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            active_idx = idx[
+                embedded[idx]
+            ]
+
+            if active_idx.size == 0:
+                continue
+
+            local_position = int(
+                np.argmax(
+                    eps_rebar[active_idx]
+                )
+            )
+
+            candidate_index = int(
+                active_idx[local_position]
+            )
+
+            candidate_strain = float(
+                eps_rebar[candidate_index]
+            )
+
+            if (
+                candidate_strain
+                > governing_steel_strain
+            ):
+                governing_steel_strain = (
+                    candidate_strain
+                )
+
+                governing_index = (
+                    candidate_index
+                )
+
+        # ==========================================================
+        # 2. Erst NACH allen Gruppen prüfen
+        # ==========================================================
+
+        if governing_index is None:
+            return default_state
+
+        # ==========================================================
+        # 3. Betondehnung an der maßgebenden Bewehrung
+        # ==========================================================
+
+        idx_ref = np.array(
+            [governing_index],
+            dtype=int,
+        )
+
+        rebar_offset = self._rebar_offset(
+            idx_ref
+        )
+
+        if np.ndim(rebar_offset) == 0:
+            eps_offset_ref = float(
+                rebar_offset
+            )
+
+        else:
+            eps_offset_ref = float(
+                np.asarray(
+                    rebar_offset,
+                    dtype=float,
+                ).ravel()[0]
+            )
+
+        eps_c_ref = float(
+            eps_rebar[governing_index]
+            + eps_offset_ref
+        )
+
+        # ==========================================================
+        # 4. VMB bestimmen
+        # ==========================================================
+
+        (
+            vmb,
+            dvmb_deps_ref,
+        ) = self._quast_vmb_from_reference_strain(
+            bulk_material=bulk_material,
+            eps_c_ref=eps_c_ref,
+        )
+
+        return {
+            "vmb": float(vmb),
+            "dvmb_deps_ref": float(
+                dvmb_deps_ref
+            ),
+            "eps_c_ref": eps_c_ref,
+            "governing_index": (
+                governing_index
+            ),
+        }
+    
+    @staticmethod
+    def _apply_quast_vmb(
+        material,
+        strain,
+        stress,
+        tangent=None,
+        vmb=1.0,
+    ):
+        """
+        Apply VMB only to the tensile concrete response.
+
+        Compression remains unchanged. The tangent returned here only
+        contains the local term VMB * E_target. The global VMB coupling
+        term is added separately to the section tangent matrix.
+        """
+
+        strain = np.asarray(
+            strain,
+            dtype=float,
+        )
+
+        stress_reduced = np.asarray(
+            stress,
+            dtype=float,
+        ).copy()
+
+        if tangent is not None:
+            tangent_reduced = np.asarray(
+                tangent,
+                dtype=float,
+            ).copy()
+        else:
+            tangent_reduced = None
+
+        if not getattr(
+            material,
+            "use_vmb",
+            False,
+        ):
+            if tangent_reduced is None:
+                return stress_reduced
+
+            return (
+                stress_reduced,
+                tangent_reduced,
+            )
+
+        vmb = float(
+            np.clip(
+                vmb,
+                0.0,
+                1.0,
+            )
+        )
+
+        tension = strain > 0.0
+
+        stress_reduced[tension] *= vmb
+
+        if tangent_reduced is not None:
+            tangent_reduced[tension] *= vmb
+
+            return (
+                stress_reduced,
+                tangent_reduced,
+            )
+
+        return stress_reduced
+
     # ==================================================================
     #  Tendon contribution (prestress) — decoupled-argument core
     # ==================================================================
+    @staticmethod
+    def _tendon_eps_ud_limits(
+        material,
+        eps_init,
+        use_german_eps_ud=False,
+    ):
+        """
+        Return the permitted total tensile strain for each tendon.
+
+        Priority:
+        1. Explicit eps_ud from the material definition.
+        2. German rule:
+        min(0.9 * eps_uk, eps_init + 0.025)
+        3. EC2 base value 0.9 * eps_uk.
+        """
+
+        eps_init = np.asarray(
+            eps_init,
+            dtype=float,
+        )
+
+        ec2 = getattr(
+            material,
+            "ec2",
+            None,
+        )
+
+        # No attached EC2 property object
+        if ec2 is None:
+            return np.full_like(
+                eps_init,
+                float(material.eps_ud),
+            )
+
+        # Explicit user input has highest priority
+        if getattr(
+            ec2,
+            "eps_ud_explicit",
+            False,
+        ):
+            return np.full_like(
+                eps_init,
+                float(ec2.eps_ud),
+            )
+
+        eps_ud_ec2 = float(
+            getattr(
+                ec2,
+                "eps_ud_ec2",
+                ec2.eps_ud,
+            )
+        )
+
+        if not use_german_eps_ud:
+            return np.full_like(
+                eps_init,
+                eps_ud_ec2,
+            )
+
+        return np.minimum(
+            eps_ud_ec2,
+            eps_init + 0.025,
+        )
+
+
 
     def _tendon_section_strain(self, eps0, chi_x, chi_y=0.0):
         r"""
@@ -556,6 +956,16 @@ class FiberSolver:
 
             e_sec_g = et_sec[idx]
             e_tot_g = e_sec_g + eps_init
+            eps_ud_limit = self._tendon_eps_ud_limits(
+                material=mat,
+                eps_init=eps_init,
+                # use_german_eps_ud=getattr(
+                #     mat,
+                #     "use_german_eps_ud",
+                #     False,
+                # ),
+            )
+            #valid_tension = ( e_tot_g<= eps_ud_limit)
             s_tendon = mat.stress_array(e_tot_g)
             s_bulk = bulk_mat.stress_array(
                 e_sec_g + self._tendon_offset(idx))
@@ -621,17 +1031,65 @@ class FiberSolver:
         """
         eb, er = self.strain_field(eps0, chi_x, chi_y)
 
+        # ==========================================================
+        # Quast VMB state per concrete material
+        # ==========================================================
+
+        quast_state_by_material = {}
+
+        for bulk_mat, _ in self._bulk_groups:
+
+            material_id = id(
+                bulk_mat
+            )
+
+            if material_id not in quast_state_by_material:
+
+                quast_state_by_material[material_id] = (
+                    self._compute_quast_state(
+                        eps_rebar=er,
+                        bulk_material=bulk_mat,
+                    )
+                )
+
         # ---- Bulk contribution ----
         if not self._is_multi_material:
-            # Fast path: single material on all fibers
-            sb = self.sec.bulk_material.stress_array(
-                eb + self._bulk_offset())
+            bulk_mat = self.sec.bulk_material
+            eb_arg = (eb+ self._bulk_offset())
+            sb_target = bulk_mat.stress_array(eb_arg)
+            state = quast_state_by_material[id(bulk_mat)]
+            # print(
+            # "\nVMB DEBUG:",
+            # f"eps_c_ref={state['eps_c_ref']:.8e}",
+            # f"vmb={state['vmb']:.8f}",
+            # f"gov_idx={state['governing_index']}",
+            # f"eps_bulk_max={np.max(eb_arg):.8e}",
+            # f"sigma_target_max={np.max(sb_target):.8f}",)
+            sb = self._apply_quast_vmb(
+                material=bulk_mat,
+                strain=eb_arg,
+                stress=sb_target,
+                vmb=state["vmb"],)
+            # print(
+            #     "VMB RESULT:",
+            #     f"sigma_after_max={np.max(sb):.8f}"
+            # )
         else:
-            # Multi-material: evaluate each group at its own offset
             sb = np.zeros_like(eb)
             for mat, idx in self._bulk_groups:
-                sb[idx] = mat.stress_array(
-                    eb[idx] + self._bulk_offset(idx))
+                eb_arg = (
+                    eb[idx]
+                    + self._bulk_offset(idx))
+                sb_target = mat.stress_array(
+                    eb_arg)
+                state = quast_state_by_material[
+                    id(mat)]
+
+                sb[idx] = self._apply_quast_vmb(
+                    material=mat,
+                    strain=eb_arg,
+                    stress=sb_target,
+                    vmb=state["vmb"],)
 
         fA = sb * self.sec.A_fibers
         N = float(np.sum(fA))
@@ -649,8 +1107,17 @@ class FiberSolver:
         for mat, bulk_mat, idx in self._rebar_groups:
             er_g = er[idx]
             s_rebar = mat.stress_array(er_g)
-            sb_at_rebars = bulk_mat.stress_array(
-                er_g + self._rebar_offset(idx))
+            bulk_eps_at_rebars = (er_g+ self._rebar_offset(idx))
+            sb_target_at_rebars = (
+                bulk_mat.stress_array(
+                    bulk_eps_at_rebars))
+            state = quast_state_by_material[
+                id(bulk_mat) ]
+            sb_at_rebars = self._apply_quast_vmb(
+                material=bulk_mat,
+                strain=bulk_eps_at_rebars,
+                stress=sb_target_at_rebars,
+                vmb=state["vmb"],)
             a = self.sec.A_rebars[idx]
             emb = embedded[idx]
 
@@ -717,19 +1184,84 @@ class FiberSolver:
         """
         eb, er = self.strain_field(eps0, chi_x, chi_y)
 
+        quast_state_by_material = {}
+
+        for bulk_mat, _ in self._bulk_groups:
+            material_id = id(bulk_mat)
+            if material_id not in quast_state_by_material:
+                quast_state_by_material[material_id] = (
+                    self._compute_quast_state(
+                        eps_rebar=er,
+                        bulk_material=bulk_mat,))
+        #print("VMB Full Section:", "state=", quast_state_by_material)
+
         # ---- Bulk: stress and tangent ----
         if not self._is_multi_material:
-            sb = self.sec.bulk_material.stress_array(
-                eb + self._bulk_offset())
-            Et_b = self.sec.bulk_material.tangent_array(
-                eb + self._bulk_offset())
+
+            bulk_mat = self.sec.bulk_material
+
+            eb_arg = (
+                eb
+                + self._bulk_offset()
+            )
+
+            sb_target = bulk_mat.stress_array(
+                eb_arg
+            )
+
+            Et_target = bulk_mat.tangent_array(
+                eb_arg
+            )
+
+            state = quast_state_by_material[
+                id(bulk_mat)
+            ]
+
+            # print(
+            #     "VMB DEBUG |",
+            #     f"idx={state['governing_index']} |",
+            #     f"eps_c_ref={state['eps_c_ref']:.8e} |",
+            #     f"vmb={state['vmb']:.8f} |",
+            #     f"eps_max={np.max(eb_arg):.8e} |",
+            #     f"sigma_before={np.max(sb_target):.8f}",
+            # )
+
+            sb, Et_b = self._apply_quast_vmb(
+                material=bulk_mat,
+                strain=eb_arg,
+                stress=sb_target,
+                tangent=Et_target,
+                vmb=state["vmb"],
+            )
+            # print(
+            #     "VMB RESULT |",
+            #     f"sigma_after={np.max(sb):.8f}"
+            # )
         else:
             sb = np.zeros_like(eb)
             Et_b = np.zeros_like(eb)
             for mat, idx in self._bulk_groups:
-                e_off = eb[idx] + self._bulk_offset(idx)
-                sb[idx] = mat.stress_array(e_off)
-                Et_b[idx] = mat.tangent_array(e_off)
+                eb_arg = (
+                    eb[idx]
+                    + self._bulk_offset(idx))
+                sb_target_group = mat.stress_array(
+                    eb_arg)
+                Et_target_group = mat.tangent_array(
+                    eb_arg)
+                state = quast_state_by_material[
+                    id(mat)]
+                (
+                    sb_group,
+                    Et_group,
+                ) = self._apply_quast_vmb(
+                    material=mat,
+                    strain=eb_arg,
+                    stress=sb_target_group,
+                    tangent=Et_target_group,
+                    vmb=state["vmb"],)
+
+                sb[idx] = sb_group
+                Et_b[idx] = Et_group
 
         A = self.sec.A_fibers
         ly = self._ly_bulk
@@ -755,6 +1287,86 @@ class FiberSolver:
         K[2, 1] = K[1, 2]
         K[2, 2] = float(np.sum(EtA * lx * lx))
 
+        # ==========================================================
+        # Full Quast VMB coupling tangent from bulk concrete fibers
+        # ==========================================================
+
+        for bulk_mat, idx in self._bulk_groups:
+            state = quast_state_by_material[
+                id(bulk_mat)]
+            governing_index = state[
+                "governing_index"]
+            dvmb_deps_ref = state[
+                "dvmb_deps_ref"]
+            if (
+                governing_index is None
+                or dvmb_deps_ref == 0.0
+            ):
+                continue
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+            strain_group = (
+                eb[idx]
+                + self._bulk_offset(idx)
+            )
+            tension = strain_group > 0.0
+            if not np.any(tension):
+                continue
+            sigma_target_group = (
+                bulk_mat.stress_array(
+                    strain_group))
+            idx_tension = idx[tension]
+            sigma_tension = (
+                sigma_target_group[tension])
+            area_tension = (
+                self.sec.A_fibers[
+                    idx_tension])
+            ly_tension = (
+                self._ly_bulk[
+                    idx_tension])
+            lx_tension = (
+                self._lx_bulk[
+                    idx_tension])
+
+            # Resultant direction generated by all target tensile stresses
+            coupling_resultant = np.array([
+                np.sum(
+                    area_tension
+                    * sigma_tension
+                ),
+                np.sum(
+                    area_tension
+                    * sigma_tension
+                    * ly_tension
+                ),
+                -np.sum(
+                    area_tension
+                    * sigma_tension
+                    * lx_tension
+                ),
+            ], dtype=float)
+
+            # Strain-plane vector at the governing rebar position
+            phi_ref = np.array([
+                1.0,
+                self._ly_rebar[
+                    governing_index
+                ],
+                -self._lx_rebar[
+                    governing_index
+                ],
+            ], dtype=float)
+
+            K += (
+                dvmb_deps_ref
+                * np.outer(
+                    coupling_resultant,
+                    phi_ref,
+                )
+            )
+
         # ---- Rebar contribution ----
         # See ``integrate``: each (rebar mat, zone mat) group subtracts
         # the displaced bulk stress and tangent using the zone's law.
@@ -764,10 +1376,28 @@ class FiberSolver:
             er_g = er[idx]
             s_rebar = mat.stress_array(er_g)
             Et_rebar = mat.tangent_array(er_g)
-            sb_at_rebars = bulk_mat.stress_array(
-                er_g + self._rebar_offset(idx))
-            Et_bulk_r = bulk_mat.tangent_array(
-                er_g + self._rebar_offset(idx))
+            bulk_eps_at_rebars = (
+                er_g
+                + self._rebar_offset(idx))
+            sb_target_at_rebars = (
+                bulk_mat.stress_array(
+                    bulk_eps_at_rebars))
+            Et_target_at_rebars = (
+                bulk_mat.tangent_array(
+                    bulk_eps_at_rebars))
+            state = quast_state_by_material[
+                id(bulk_mat)]
+
+            (
+                sb_at_rebars,
+                Et_bulk_r,
+            ) = self._apply_quast_vmb(
+                material=bulk_mat,
+                strain=bulk_eps_at_rebars,
+                stress=sb_target_at_rebars,
+                tangent=Et_target_at_rebars,
+                vmb=state["vmb"],
+            )
             a = self.sec.A_rebars[idx]
             emb = embedded[idx]
             ly_r = self._ly_rebar[idx]
@@ -803,10 +1433,38 @@ class FiberSolver:
             My += Myt
             K += Kt
 
-        # Symmetric
-        K[1, 0] = K[0, 1]
-        K[2, 0] = K[0, 2]
-        K[2, 1] = K[1, 2]
+        # ==========================================================
+        # Final tangent-matrix handling
+        # ==========================================================
+        #
+        # Without Quast VMB the traditional fiber tangent is symmetric
+        # and the original GenSec behaviour is retained exactly.
+        #
+        # With Quast VMB active, the additional coupling term
+        #
+        #     dVMB / d eps_ref
+        #
+        # couples all concrete tension fibers to the governing reference
+        # reinforcement position. The resulting consistent tangent is
+        # generally non-symmetric and must therefore NOT be symmetrized.
+        # ==========================================================
+
+        vmb_active = any(
+            getattr(mat, "use_vmb", False)
+            for mat, _ in self._bulk_groups
+        )
+
+        if not vmb_active:
+
+            # Original GenSec behaviour:
+            # tangent matrix is symmetric
+            K[1, 0] = K[0, 1]
+            K[2, 0] = K[0, 2]
+            K[2, 1] = K[1, 2]
+
+        # If VMB is active:
+        # Do not enforce symmetry.
+        # The full Quast coupling tangent added above is retained.
 
         return N, Mx, My, K
 
@@ -1637,62 +2295,277 @@ class FiberSolver:
     #  Post-processing
     # ------------------------------------------------------------------
 
-    def get_fiber_results(self, eps0, chi_x, chi_y=0.0):
-        r"""
+    # def get_fiber_results(self, eps0, chi_x, chi_y=0.0):
+    #     r"""
+    #     Full strain/stress state at every fiber.
+
+    #     For multi-material sections, each bulk fiber is evaluated
+    #     with its own constitutive law.
+
+    #     Parameters
+    #     ----------
+    #     eps0 : float
+    #     chi_x : float
+    #     chi_y : float, optional
+
+    #     Returns
+    #     -------
+    #     dict
+    #         ``'bulk'``: sub-dict with ``x``, ``y``, ``eps``,
+    #         ``sigma``, ``dA``.
+    #         ``'rebars'``: sub-dict with ``x``, ``y``, ``eps``,
+    #         ``sigma`` (ideal_gross), ``sigma_net`` (net after bulk
+    #         subtraction), ``A``, ``embedded``.
+    #     """
+    #     eb, er = self.strain_field(eps0, chi_x, chi_y)
+
+    #     # Bulk stresses
+    #     if not self._is_multi_material:
+    #         sb = self.sec.bulk_material.stress_array(
+    #             eb + self._bulk_offset())
+    #     else:
+    #         sb = np.zeros_like(eb)
+    #         for mat, idx in self._bulk_groups:
+    #             sb[idx] = mat.stress_array(
+    #                 eb[idx] + self._bulk_offset(idx))
+
+    #     # Rebar stresses (zone-aware grouping).
+    #     sr_ideal_gross = np.zeros_like(er)
+    #     sb_at_rebars = np.zeros_like(er)
+    #     for mat, bulk_mat, idx in self._rebar_groups:
+    #         er_g = er[idx]
+    #         sr_ideal_gross[idx] = mat.stress_array(er_g)
+    #         sb_at_rebars[idx] = bulk_mat.stress_array(
+    #             er_g + self._rebar_offset(idx))
+
+    #     # Net rebar stress (subtract zone-correct bulk at rebar location)
+    #     sr_net = sr_ideal_gross.copy()
+    #     emb = self.sec.embedded_rebars
+    #     sr_net[emb] -= sb_at_rebars[emb]
+
+    #     # ---- Tendon stresses (SLS): decoupled-argument evaluation ----
+    #     # Each tendon's own law is evaluated at the offset total strain
+    #     # (section strain + locked-in prestrain); the displaced bulk is
+    #     # evaluated at the section strain.  Reported quantities:
+    #     #   eps_sec  — section strain at the tendon
+    #     #   eps_tot  — total strain seen by the tendon law
+    #     #   sigma    — tendon stress sigma_p(eps_tot)
+    #     #   sigma_net— net embedded stress (after bulk subtraction)
+    #     result = {
+    #         "bulk": {
+    #             "x": self.sec.x_fibers.copy(),
+    #             "y": self.sec.y_fibers.copy(),
+    #             "eps": eb.copy(),
+    #             "sigma": sb.copy(),
+    #             "dA": self.sec.A_fibers.copy(),
+    #         },
+    #         "rebars": {
+    #             "x": self.sec.x_rebars.copy(),
+    #             "y": self.sec.y_rebars.copy(),
+    #             "eps": er.copy(),
+    #             "sigma": sr_ideal_gross.copy(),
+    #             "sigma_net": sr_net.copy(),
+    #             "A": self.sec.A_rebars.copy(),
+    #             "embedded": self.sec.embedded_rebars.copy(),
+    #         },
+    #     }
+
+    #     if self._has_tendons:
+    #         et_sec = self._tendon_section_strain(eps0, chi_x, chi_y)
+    #         et_tot = np.zeros_like(et_sec)
+    #         sp = np.zeros_like(et_sec)
+    #         sb_at_tendons = np.zeros_like(et_sec)
+    #         for mat, bulk_mat, idx, eps_init in self._tendon_groups:
+    #             e_sec_g = et_sec[idx]
+    #             e_tot_g = e_sec_g + eps_init
+    #             et_tot[idx] = e_tot_g
+    #             sp[idx] = mat.stress_array(e_tot_g)
+    #             sb_at_tendons[idx] = bulk_mat.stress_array(
+    #                 e_sec_g + self._tendon_offset(idx))
+    #         sp_net = sp.copy()
+    #         emb_t = self.sec.embedded_tendons
+    #         sp_net[emb_t] -= sb_at_tendons[emb_t]
+    #         result["tendons"] = {
+    #             "x": self.sec.x_tendons.copy(),
+    #             "y": self.sec.y_tendons.copy(),
+    #             "eps_sec": et_sec.copy(),
+    #             "eps_init": self._eps_init_tendon.copy(),
+    #             "eps_tot": et_tot.copy(),
+    #             "sigma": sp.copy(),
+    #             "sigma_net": sp_net.copy(),
+    #             "A": self.sec.A_tendons.copy(),
+    #             "embedded": self.sec.embedded_tendons.copy(),
+    #         }
+
+    #     return result
+    def get_fiber_results(
+        self,
+        eps0,
+        chi_x,
+        chi_y=0.0,
+    ):
+        """
         Full strain/stress state at every fiber.
 
-        For multi-material sections, each bulk fiber is evaluated
-        with its own constitutive law.
-
-        Parameters
-        ----------
-        eps0 : float
-        chi_x : float
-        chi_y : float, optional
-
-        Returns
-        -------
-        dict
-            ``'bulk'``: sub-dict with ``x``, ``y``, ``eps``,
-            ``sigma``, ``dA``.
-            ``'rebars'``: sub-dict with ``x``, ``y``, ``eps``,
-            ``sigma`` (ideal_gross), ``sigma_net`` (net after bulk
-            subtraction), ``A``, ``embedded``.
+        Quast VMB is applied consistently with integrate().
         """
-        eb, er = self.strain_field(eps0, chi_x, chi_y)
 
+        eb, er = self.strain_field(
+            eps0,
+            chi_x,
+            chi_y
+        )
+
+        # ======================================================
+        # Quast VMB state
+        # ======================================================
+
+        quast_state_by_material = {}
+
+        for bulk_mat, _ in self._bulk_groups:
+
+            material_id = id(
+                bulk_mat
+            )
+
+            if material_id not in quast_state_by_material:
+
+                quast_state_by_material[
+                    material_id
+                ] = self._compute_quast_state(
+                    eps_rebar=er,
+                    bulk_material=bulk_mat,
+                )
+
+        # ======================================================
         # Bulk stresses
+        # ======================================================
+
         if not self._is_multi_material:
-            sb = self.sec.bulk_material.stress_array(
-                eb + self._bulk_offset())
+
+            bulk_mat = self.sec.bulk_material
+
+            eb_arg = (
+                eb
+                + self._bulk_offset()
+            )
+
+            sb_target = bulk_mat.stress_array(
+                eb_arg
+            )
+
+            state = quast_state_by_material[
+                id(bulk_mat)
+            ]
+
+            sb = self._apply_quast_vmb(
+                material=bulk_mat,
+                strain=eb_arg,
+                stress=sb_target,
+                vmb=state["vmb"],
+            )
+
         else:
-            sb = np.zeros_like(eb)
+
+            sb = np.zeros_like(
+                eb
+            )
+
             for mat, idx in self._bulk_groups:
-                sb[idx] = mat.stress_array(
-                    eb[idx] + self._bulk_offset(idx))
 
-        # Rebar stresses (zone-aware grouping).
-        sr_ideal_gross = np.zeros_like(er)
-        sb_at_rebars = np.zeros_like(er)
-        for mat, bulk_mat, idx in self._rebar_groups:
+                eb_arg = (
+                    eb[idx]
+                    + self._bulk_offset(idx)
+                )
+
+                sb_target = mat.stress_array(
+                    eb_arg
+                )
+
+                state = quast_state_by_material[
+                    id(mat)
+                ]
+
+                sb[idx] = self._apply_quast_vmb(
+                    material=mat,
+                    strain=eb_arg,
+                    stress=sb_target,
+                    vmb=state["vmb"],
+                )
+
+        # ======================================================
+        # Rebar stresses
+        # ======================================================
+
+        sr_ideal_gross = np.zeros_like(
+            er
+        )
+
+        sb_at_rebars = np.zeros_like(
+            er
+        )
+
+        for (
+            mat,
+            bulk_mat,
+            idx,
+        ) in self._rebar_groups:
+
             er_g = er[idx]
-            sr_ideal_gross[idx] = mat.stress_array(er_g)
-            sb_at_rebars[idx] = bulk_mat.stress_array(
-                er_g + self._rebar_offset(idx))
 
-        # Net rebar stress (subtract zone-correct bulk at rebar location)
-        sr_net = sr_ideal_gross.copy()
+            # Stahlspannung
+            sr_ideal_gross[idx] = (
+                mat.stress_array(
+                    er_g
+                )
+            )
+
+            # Betondehnung an Bewehrungsposition
+            bulk_eps_at_rebars = (
+                er_g
+                + self._rebar_offset(idx)
+            )
+
+            sb_target_at_rebars = (
+                bulk_mat.stress_array(
+                    bulk_eps_at_rebars
+                )
+            )
+
+            state = (
+                quast_state_by_material[
+                    id(bulk_mat)
+                ]
+            )
+
+            # VMB auch auf verdrängten Beton anwenden
+            sb_at_rebars[idx] = (
+                self._apply_quast_vmb(
+                    material=bulk_mat,
+                    strain=bulk_eps_at_rebars,
+                    stress=sb_target_at_rebars,
+                    vmb=state["vmb"],
+                )
+            )
+
+        # ======================================================
+        # Net rebar stress
+        # ======================================================
+
+        sr_net = (
+            sr_ideal_gross.copy()
+        )
+
         emb = self.sec.embedded_rebars
-        sr_net[emb] -= sb_at_rebars[emb]
 
-        # ---- Tendon stresses (SLS): decoupled-argument evaluation ----
-        # Each tendon's own law is evaluated at the offset total strain
-        # (section strain + locked-in prestrain); the displaced bulk is
-        # evaluated at the section strain.  Reported quantities:
-        #   eps_sec  — section strain at the tendon
-        #   eps_tot  — total strain seen by the tendon law
-        #   sigma    — tendon stress sigma_p(eps_tot)
-        #   sigma_net— net embedded stress (after bulk subtraction)
+        sr_net[emb] -= (
+            sb_at_rebars[emb]
+        )
+
+        # ======================================================
+        # Result
+        # ======================================================
+
         result = {
             "bulk": {
                 "x": self.sec.x_fibers.copy(),
@@ -1701,6 +2574,7 @@ class FiberSolver:
                 "sigma": sb.copy(),
                 "dA": self.sec.A_fibers.copy(),
             },
+
             "rebars": {
                 "x": self.sec.x_rebars.copy(),
                 "y": self.sec.y_rebars.copy(),
@@ -1708,35 +2582,139 @@ class FiberSolver:
                 "sigma": sr_ideal_gross.copy(),
                 "sigma_net": sr_net.copy(),
                 "A": self.sec.A_rebars.copy(),
-                "embedded": self.sec.embedded_rebars.copy(),
+                "embedded": (
+                    self.sec.embedded_rebars.copy()
+                ),
+            },
+
+            # Für Kontrolle und spätere Ausgabe
+            "quast_vmb": {
+                id(mat): {
+                    "vmb": float(
+                        state["vmb"]
+                    ),
+                    "eps_c_ref": float(
+                        state["eps_c_ref"]
+                    ),
+                    "governing_index": (
+                        state["governing_index"]
+                    ),
+                    "dvmb_deps_ref": float(
+                        state["dvmb_deps_ref"]
+                    ),
+                }
+                for mat, _ in self._bulk_groups
+                for state in [
+                    quast_state_by_material[
+                        id(mat)
+                    ]
+                ]
             },
         }
 
+        # ======================================================
+        # Tendons
+        # ======================================================
+
         if self._has_tendons:
-            et_sec = self._tendon_section_strain(eps0, chi_x, chi_y)
-            et_tot = np.zeros_like(et_sec)
-            sp = np.zeros_like(et_sec)
-            sb_at_tendons = np.zeros_like(et_sec)
-            for mat, bulk_mat, idx, eps_init in self._tendon_groups:
+
+            et_sec = (
+                self._tendon_section_strain(
+                    eps0,
+                    chi_x,
+                    chi_y
+                )
+            )
+
+            et_tot = np.zeros_like(
+                et_sec
+            )
+
+            sp = np.zeros_like(
+                et_sec
+            )
+
+            sb_at_tendons = np.zeros_like(
+                et_sec
+            )
+
+            for (
+                mat,
+                bulk_mat,
+                idx,
+                eps_init,
+            ) in self._tendon_groups:
+
                 e_sec_g = et_sec[idx]
-                e_tot_g = e_sec_g + eps_init
+
+                e_tot_g = (
+                    e_sec_g
+                    + eps_init
+                )
+
                 et_tot[idx] = e_tot_g
-                sp[idx] = mat.stress_array(e_tot_g)
-                sb_at_tendons[idx] = bulk_mat.stress_array(
-                    e_sec_g + self._tendon_offset(idx))
+
+                # Spanngliedspannung
+                sp[idx] = mat.stress_array(
+                    e_tot_g
+                )
+
+                # Betonspannung an Spanngliedposition
+                bulk_eps_at_tendons = (
+                    e_sec_g
+                    + self._tendon_offset(idx)
+                )
+
+                sb_target_at_tendons = (
+                    bulk_mat.stress_array(
+                        bulk_eps_at_tendons
+                    )
+                )
+
+                state = (
+                    quast_state_by_material[
+                        id(bulk_mat)
+                    ]
+                )
+
+                # Auch hier denselben VMB anwenden
+                sb_at_tendons[idx] = (
+                    self._apply_quast_vmb(
+                        material=bulk_mat,
+                        strain=bulk_eps_at_tendons,
+                        stress=sb_target_at_tendons,
+                        vmb=state["vmb"],
+                    )
+                )
+
             sp_net = sp.copy()
-            emb_t = self.sec.embedded_tendons
-            sp_net[emb_t] -= sb_at_tendons[emb_t]
+
+            emb_t = (
+                self.sec.embedded_tendons
+            )
+
+            sp_net[emb_t] -= (
+                sb_at_tendons[emb_t]
+            )
+
             result["tendons"] = {
                 "x": self.sec.x_tendons.copy(),
                 "y": self.sec.y_tendons.copy(),
+
                 "eps_sec": et_sec.copy(),
-                "eps_init": self._eps_init_tendon.copy(),
+                "eps_init": (
+                    self._eps_init_tendon.copy()
+                ),
                 "eps_tot": et_tot.copy(),
+
                 "sigma": sp.copy(),
                 "sigma_net": sp_net.copy(),
+
                 "A": self.sec.A_tendons.copy(),
-                "embedded": self.sec.embedded_tendons.copy(),
+
+                "embedded": (
+                    self.sec.embedded_tendons.copy()
+                ),
             }
 
         return result

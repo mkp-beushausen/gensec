@@ -137,6 +137,9 @@ class ConcreteEC2Nonlinear(Material):
         fct=0.0,
         eps_cr=None,
         n_tension=None,
+        use_vmb=False,
+        eps_vmb_u= 0.0025,
+        n_vmb=1.0,
         name="ConcreteEC2Nonlinear",
     ):
         # ==========================================================
@@ -188,6 +191,24 @@ class ConcreteEC2Nonlinear(Material):
             self.n_tension = float(
                 n_tension
             )
+
+        # ==========================================================
+        # Quast VMB parameters
+        # ==========================================================
+        self.use_vmb = bool(use_vmb)
+        self.eps_vmb_u = abs(
+            float(eps_vmb_u))
+        self.n_vmb = float(n_vmb)
+        if self.use_vmb:
+            if self.eps_cr <= 0.0:
+                raise ValueError(
+                    "Quast VMB requires eps_cr > 0.")
+            if self.eps_vmb_u <= self.eps_cr:
+                raise ValueError(
+                    "eps_vmb_u must be greater than eps_cr.")
+            if self.n_vmb <= 0.0:
+                raise ValueError(
+                    "n_vmb must be greater than zero.")
 
         self._name = str(name)
 

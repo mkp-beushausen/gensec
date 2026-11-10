@@ -463,83 +463,528 @@ class AnalysisEngine:
         sv = self.solver
         sec = sv.sec
         eb, er = sv.strain_field(eps0, chi_x, chi_y)
+        sv = self.solver
+        sec = sv.sec
+
+        eb, er = sv.strain_field(
+            eps0,
+            chi_x,
+            chi_y,
+        )
+
         components = []
 
-        # ---- Bulk zones ----
-        for zone_idx, (mat, idx) in enumerate(sv._bulk_groups):
-            sb = mat.stress_array(eb[idx])
+        # ======================================================
+        # Quast-VMB-Zustand je Betonmaterial
+        # ======================================================
+
+        quast_state_by_material = {}
+
+        for bulk_mat, _ in sv._bulk_groups:
+            material_id = id(bulk_mat)
+
+            if material_id not in quast_state_by_material:
+                quast_state_by_material[material_id] = (
+                    sv._compute_quast_state(
+                        eps_rebar=er,
+                        bulk_material=bulk_mat,
+                    )
+                )
+
+        # ======================================================
+        # Bulk-Zonen
+        # ======================================================
+
+        for zone_idx, (mat, idx) in enumerate(
+                sv._bulk_groups):
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            eb_group = (
+                eb[idx]
+                + sv._bulk_offset(idx)
+            )
+
+            sb_target = mat.stress_array(
+                eb_group
+            )
+
+            state = quast_state_by_material[
+                id(mat)
+            ]
+
+            sb = sv._apply_quast_vmb(
+                material=mat,
+                strain=eb_group,
+                stress=sb_target,
+                vmb=state["vmb"],
+            )
+
             a = sec.A_fibers[idx]
             ly = sv._ly_bulk[idx]
             lx = sv._lx_bulk[idx]
+
             fA = sb * a
 
-            N_c = float(np.sum(fA))
-            Mx_c = float(np.sum(fA * ly))
-            My_c = -float(np.sum(fA * lx))
+            N_c = float(
+                np.sum(fA)
+            )
+
+            Mx_c = float(
+                np.sum(fA * ly)
+            )
+
+            My_c = -float(
+                np.sum(fA * lx)
+            )
 
             mat_name = self._name_map.get(
-                id(mat), type(mat).__name__)
+                id(mat),
+                type(mat).__name__,
+            )
+
             components.append({
                 "type": "bulk",
                 "material_name": mat_name,
                 "zone": zone_idx,
+
                 "N": N_c,
                 "Mx": Mx_c,
                 "My": My_c,
-                "N_kN": round(N_c / 1e3, 4),
-                "Mx_kNm": round(Mx_c / 1e6, 6),
-                "My_kNm": round(My_c / 1e6, 6),
+
+                "N_kN": round(
+                    N_c / 1.0e3,
+                    4,
+                ),
+
+                "Mx_kNm": round(
+                    Mx_c / 1.0e6,
+                    6,
+                ),
+
+                "My_kNm": round(
+                    My_c / 1.0e6,
+                    6,
+                ),
+
+                # Kontrolle des VMB-Zustands
+                "vmb": float(
+                    state["vmb"]
+                ),
+
+                "eps_c_ref": float(
+                    state["eps_c_ref"]
+                ),
+
+                "governing_index": (
+                    state["governing_index"]
+                ),
+
+                "sigma_max": float(
+                    np.max(sb)
+                ) if sb.size else 0.0,
+
+                "sigma_min": float(
+                    np.min(sb)
+                ) if sb.size else 0.0,
             })
 
-        # ---- Rebar groups ----
-        embedded = sec.embedded_rebars
+        # ======================================================
+        # Bewehrungsgruppen
+        # ======================================================
+
+        embedded = np.asarray(
+            sec.embedded_rebars,
+            dtype=bool,
+        )
+
         for mat, bulk_mat, idx in sv._rebar_groups:
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
             er_g = er[idx]
-            s_rebar = mat.stress_array(er_g)
-            sb_at_rebars = bulk_mat.stress_array(er_g)
+
+            # Bruttospannung der Bewehrung
+            s_rebar = mat.stress_array(
+                er_g
+            )
+
+            # Betondehnung an den Bewehrungspositionen
+            bulk_eps_at_rebars = (
+                er_g
+                + sv._rebar_offset(idx)
+            )
+
+            # Unreduzierte Betonspannung
+            sb_target_at_rebars = (
+                bulk_mat.stress_array(
+                    bulk_eps_at_rebars
+                )
+            )
+
+            state = quast_state_by_material[
+                id(bulk_mat)
+            ]
+
+            # VMB-reduzierte Betonspannung
+            sb_at_rebars = sv._apply_quast_vmb(
+                material=bulk_mat,
+                strain=bulk_eps_at_rebars,
+                stress=sb_target_at_rebars,
+                vmb=state["vmb"],
+            )
+
             a = sec.A_rebars[idx]
             emb = embedded[idx]
+
             ly_r = sv._ly_rebar[idx]
             lx_r = sv._lx_rebar[idx]
 
+            # Netto-Bewehrungsspannung:
+            # Stahl minus verdraengter Beton
             s_net = s_rebar.copy()
-            s_net[emb] -= sb_at_rebars[emb]
+
+            s_net[emb] -= (
+                sb_at_rebars[emb]
+            )
+
             fA = s_net * a
 
-            N_s = float(np.sum(fA))
-            Mx_s = float(np.sum(fA * ly_r))
-            My_s = -float(np.sum(fA * lx_r))
+            N_s = float(
+                np.sum(fA)
+            )
+
+            Mx_s = float(
+                np.sum(fA * ly_r)
+            )
+
+            My_s = -float(
+                np.sum(fA * lx_r)
+            )
 
             mat_name = self._name_map.get(
-                id(mat), type(mat).__name__)
+                id(mat),
+                type(mat).__name__,
+            )
 
             layers = []
-            for j, gi in enumerate(idx):
+
+            for local_index, global_index in enumerate(
+                    idx):
+
                 layers.append({
-                    "index": int(gi),
-                    "x": float(sec.x_rebars[gi]),
-                    "y": float(sec.y_rebars[gi]),
-                    "A": float(a[j]),
-                    "eps": float(er_g[j]),
-                    "sigma_gross": float(s_rebar[j]),
-                    "sigma_net": float(s_net[j]),
+                    "index": int(
+                        global_index
+                    ),
+
+                    "x": float(
+                        sec.x_rebars[
+                            global_index
+                        ]
+                    ),
+
+                    "y": float(
+                        sec.y_rebars[
+                            global_index
+                        ]
+                    ),
+
+                    "A": float(
+                        a[local_index]
+                    ),
+
+                    "eps": float(
+                        er_g[local_index]
+                    ),
+
+                    "sigma_gross": float(
+                        s_rebar[local_index]
+                    ),
+
+                    "sigma_bulk": float(
+                        sb_at_rebars[
+                            local_index
+                        ]
+                    ),
+
+                    "sigma_net": float(
+                        s_net[local_index]
+                    ),
+
                     "F_net_kN": round(
-                        float(s_net[j] * a[j]) / 1e3, 4),
+                        float(
+                            s_net[local_index]
+                            * a[local_index]
+                        ) / 1.0e3,
+                        4,
+                    ),
+
+                    "embedded": bool(
+                        emb[local_index]
+                    ),
                 })
 
             components.append({
                 "type": "rebar",
                 "material_name": mat_name,
+
                 "N": N_s,
                 "Mx": Mx_s,
                 "My": My_s,
-                "N_kN": round(N_s / 1e3, 4),
-                "Mx_kNm": round(Mx_s / 1e6, 6),
-                "My_kNm": round(My_s / 1e6, 6),
+
+                "N_kN": round(
+                    N_s / 1.0e3,
+                    4,
+                ),
+
+                "Mx_kNm": round(
+                    Mx_s / 1.0e6,
+                    6,
+                ),
+
+                "My_kNm": round(
+                    My_s / 1.0e6,
+                    6,
+                ),
+
+                "vmb_bulk": float(
+                    state["vmb"]
+                ),
+
                 "layers": layers,
             })
 
-        return components
+        # ======================================================
+        # Prestressing tendons
+        # ======================================================
+
+        if sv._has_tendons:
+
+            et_sec = sv._tendon_section_strain(
+                eps0,
+                chi_x,
+                chi_y,
+            )
+
+            N_p = 0.0
+            Mx_p = 0.0
+            My_p = 0.0
+
+            tendon_layers = []
+
+            embedded_tendons = (
+                sec.embedded_tendons
+            )
+
+            for (
+                mat,
+                bulk_mat,
+                idx,
+                eps_init,
+            ) in sv._tendon_groups:
+
+                idx = np.asarray(
+                    idx,
+                    dtype=int,
+                )
+
+                e_sec = et_sec[idx]
+
+                e_tot = (
+                    e_sec
+                    + eps_init
+                )
+
+                # Spanngliedspannung
+                s_tendon = mat.stress_array(
+                    e_tot
+                )
+
+                # Betonspannung an derselben Position
+                bulk_eps = (
+                    e_sec
+                    + sv._tendon_offset(idx)
+                )
+
+                s_bulk_target = (
+                    bulk_mat.stress_array(
+                        bulk_eps
+                    )
+                )
+
+                state = quast_state_by_material[
+                    id(bulk_mat)
+                ]
+
+                # VMB auch fuer den verdraengten
+                # Betonanteil beruecksichtigen
+                s_bulk = sv._apply_quast_vmb(
+                    material=bulk_mat,
+                    strain=bulk_eps,
+                    stress=s_bulk_target,
+                    vmb=state["vmb"],
+                )
+
+                embedded = (
+                    embedded_tendons[idx]
+                )
+
+                s_net = s_tendon.copy()
+
+                s_net[embedded] -= (
+                    s_bulk[embedded]
+                )
+
+                A_p = sec.A_tendons[idx]
+
+                ly_p = sv._ly_tendon[idx]
+                lx_p = sv._lx_tendon[idx]
+
+                f_p = (
+                    s_net
+                    * A_p
+                )
+
+                N_group = float(
+                    np.sum(f_p)
+                )
+
+                Mx_group = float(
+                    np.sum(
+                        f_p * ly_p
+                    )
+                )
+
+                My_group = -float(
+                    np.sum(
+                        f_p * lx_p
+                    )
+                )
+
+                N_p += N_group
+                Mx_p += Mx_group
+                My_p += My_group
+
+                for local_i, global_i in enumerate(
+                        idx):
+
+                    tendon_layers.append({
+                        "index": int(
+                            global_i
+                        ),
+
+                        "x": float(
+                            sec.x_tendons[
+                                global_i
+                            ]
+                        ),
+
+                        "y": float(
+                            sec.y_tendons[
+                                global_i
+                            ]
+                        ),
+
+                        "A": float(
+                            A_p[local_i]
+                        ),
+
+                        "eps_sec": float(
+                            e_sec[local_i]
+                        ),
+
+                        "eps_init": float(
+                            eps_init[local_i]
+                        ),
+
+                        "eps_tot": float(
+                            e_tot[local_i]
+                        ),
+
+                        "sigma": float(
+                            s_tendon[local_i]
+                        ),
+
+                        "sigma_bulk": float(
+                            s_bulk[local_i]
+                        ),
+
+                        "sigma_net": float(
+                            s_net[local_i]
+                        ),
+
+                        "F_net_kN": (
+                            float(
+                                f_p[local_i]
+                            )
+                            / 1.0e3
+                        ),
+
+                        "embedded": bool(
+                            embedded[local_i]
+                        ),
+                    })
+
+            components.append({
+                "type": "tendon",
+                "material_name": "prestressing",
+
+                "N": N_p,
+                "Mx": Mx_p,
+                "My": My_p,
+
+                "N_kN": round(
+                    N_p / 1.0e3,
+                    4,
+                ),
+
+                "Mx_kNm": round(
+                    Mx_p / 1.0e6,
+                    6,
+                ),
+
+                "My_kNm": round(
+                    My_p / 1.0e6,
+                    6,
+                ),
+
+                "layers": tendon_layers,
+            })
+        # N_sum = sum(
+        #     component["N"]
+        #     for component in components
+        # )
+
+        # Mx_sum = sum(
+        #     component["Mx"]
+        #     for component in components
+        # )
+
+        # My_sum = sum(
+        #     component["My"]
+        #     for component in components
+        # )
+
+        # N_ref, Mx_ref, My_ref = (
+        #     sv.integrate(
+        #         eps0,
+        #         chi_x,
+        #         chi_y,
+        #     )
+        # )
+
+        # print(
+        #     "DECOMPOSE CHECK |",
+        #     f"dN={N_sum - N_ref:.6e} N |",
+        #     f"dMx={Mx_sum - Mx_ref:.6e} Nmm |",
+        #     f"dMy={My_sum - My_ref:.6e} Nmm",
+        # )
+        # return components
 
     @contextlib.contextmanager
     def _active_solver(self, bundle):

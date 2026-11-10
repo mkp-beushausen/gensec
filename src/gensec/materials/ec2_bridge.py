@@ -225,7 +225,7 @@ def steel_from_en10025(grade='S355', t=0, young=200000,
 
 
 def prestress_from_ec2(f_p01k, f_pk, eps_uk, Ep=195000.0,
-                       ls='F', NA='EC2', eps_ud_factor=0.9,
+                       ls='F', NA='EC2', eps_ud_factor=0.9, eps_ud=None, use_german_eps_ud=True,
                        gamma_s_override=None, diagram='horizontal',
                        works_in_compression=True):
     r"""
@@ -286,7 +286,7 @@ def prestress_from_ec2(f_p01k, f_pk, eps_uk, Ep=195000.0,
     needed, which is why the material itself stays idealization-free.
     """
     ec2 = fbpren(f_p01k=f_p01k, f_pk=f_pk, eps_uk=eps_uk, Ep=Ep,
-                 ls=ls, NA=NA, eps_ud_factor=eps_ud_factor,
+                 ls=ls, NA=NA, eps_ud_factor=eps_ud_factor, eps_ud=eps_ud,
                  gamma_s_override=gamma_s_override)
 
     if diagram == 'inclined':
@@ -307,11 +307,12 @@ def prestress_from_ec2(f_p01k, f_pk, eps_uk, Ep=195000.0,
         works_in_compression=works_in_compression,
     )
     ps.ec2 = ec2
+    ps.use_german_eps_ud = bool(use_german_eps_ud)
     return ps
 
 
 def prestress_from_class(ps_class, ls='F', NA='EC2',
-                         eps_ud_factor=0.9, gamma_s_override=None,
+                         eps_ud_factor=0.9, eps_ud=None, use_german_eps_ud=True, gamma_s_override=None,
                          diagram='horizontal',
                          works_in_compression=True):
     r"""
@@ -345,7 +346,7 @@ def prestress_from_class(ps_class, ls='F', NA='EC2',
     d = PrestressClassData[ps_class]
     return prestress_from_ec2(
         f_p01k=d.f_p01k, f_pk=d.f_pk, eps_uk=d.eps_uk, Ep=d.Ep,
-        ls=ls, NA=NA, eps_ud_factor=eps_ud_factor,
+        ls=ls, NA=NA, eps_ud_factor=eps_ud_factor, eps_ud=eps_ud, use_german_eps_ud=use_german_eps_ud,
         gamma_s_override=gamma_s_override, diagram=diagram,
         works_in_compression=works_in_compression,
     )
