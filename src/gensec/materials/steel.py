@@ -418,6 +418,8 @@ def _pssteel_stress_kernel(eps_flat, Ep, eps_el, sig_el, eps_ud,
             elif e <= eps_ud:
                 out[i] = sig_el + E_hard * (e - eps_el)
             # else: 0 (rupture)
+            else:
+                out[i] = sig_el + E_hard * (eps_ud - eps_el)
         elif works_in_compression:
             ea = -e
             if ea <= eps_el:
@@ -653,7 +655,7 @@ class PrestressingSteel(Material):
                 return self.Ep * eps
             if eps <= self.eps_ud:
                 return self.f_p01d + self.E_hard * (eps - self.eps_el)
-            return 0.0
+            return self.sigma_ud
         if not self.works_in_compression:
             return 0.0
         ea = -eps
@@ -756,6 +758,8 @@ class PrestressingSteel(Material):
             + self.E_hard
             * (eps[m_t] - self.eps_el)
         )
+        m_u = (eps > self.eps_ud)
+        sigma[m_u] = self.sigma_ud
         # Horizontal second compression branch
         if self.works_in_compression:
             m_c = (

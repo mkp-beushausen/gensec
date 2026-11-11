@@ -21,7 +21,7 @@ materials:
     eps_cu: -0.0035
     fct: 1.68
     eps_cr: 0.00011
-    use_vmb: false
+    use_vmb: true
     eps_vmb_u: 0.0025
     n_vmb: 2
    
@@ -73,7 +73,7 @@ section:
 demands:
   - name: Gravity
     N_kN: 0
-    Mx_kNm: -685
+    Mx_kNm: -740
     My_kNm: -5
   # - name: Seismic_x
   #   N_kN: -1200

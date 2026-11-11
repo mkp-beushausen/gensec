@@ -474,3 +474,323 @@ print()
 print(
     f"VMB plot saved as: {output_file}"
 )
+
+eps0_test = np.array([
+    -0.0010,
+    0.0000,
+    0.0005,
+    0.0010,
+    0.0015,
+    0.0020,
+    0.0025,
+    0.0030,
+])
+
+chi_x_test = np.array([
+    1.0e-5,
+    1.0e-5,
+    1.0e-5,
+    1.0e-5,
+    1.0e-5,
+    1.0e-5,
+    1.0e-5,
+    1.0e-5,
+])
+
+chi_y_test = np.zeros_like(
+    eps0_test
+)
+
+N_batch, Mx_batch, My_batch = (
+    solver.integrate_batch(
+        eps0_test,
+        chi_x_test,
+        chi_y_test,
+    )
+)
+
+for i in range(
+    len(eps0_test)
+):
+
+    N_scalar, Mx_scalar, My_scalar = (
+        solver.integrate(
+            eps0_test[i],
+            chi_x_test[i],
+            chi_y_test[i],
+        )
+    )
+
+    print(
+        f"{i:3d} | "
+        f"dN={N_batch[i] - N_scalar: .6e} | "
+        f"dMx={Mx_batch[i] - Mx_scalar: .6e} | "
+        f"dMy={My_batch[i] - My_scalar: .6e}"
+    )
+
+    assert np.isclose(
+        N_batch[i],
+        N_scalar,
+        rtol=1e-10,
+        atol=1e-5,
+    )
+
+    assert np.isclose(
+        Mx_batch[i],
+        Mx_scalar,
+        rtol=1e-10,
+        atol=1e-3,
+    )
+
+    assert np.isclose(
+        My_batch[i],
+        My_scalar,
+        rtol=1e-10,
+        atol=1e-3,
+    )
+
+print(
+    "Batch and scalar integration agree."
+)
+
+# ==========================================================
+# 8. Analytical tangent vs. numerical Jacobian
+# ==========================================================
+
+def numerical_jacobian_central(
+    solver,
+    q,
+    steps=None,
+):
+    """
+    Numerical Jacobian of
+
+        [N, Mx, My]
+
+    with respect to
+
+        [eps0, chi_x, chi_y]
+
+    using central differences.
+    """
+
+    q = np.asarray(
+        q,
+        dtype=float,
+    )
+
+    if steps is None:
+        steps = np.array([
+            1.0e-8,   # eps0
+            1.0e-10,  # chi_x
+            1.0e-10,  # chi_y
+        ])
+
+    K_num = np.zeros(
+        (3, 3),
+        dtype=float,
+    )
+
+    for j in range(3):
+
+        dq = np.zeros(3)
+        dq[j] = steps[j]
+
+        q_plus = q + dq
+        q_minus = q - dq
+
+        f_plus = np.asarray(
+            solver.integrate(
+                q_plus[0],
+                q_plus[1],
+                q_plus[2],
+            ),
+            dtype=float,
+        )
+
+        f_minus = np.asarray(
+            solver.integrate(
+                q_minus[0],
+                q_minus[1],
+                q_minus[2],
+            ),
+            dtype=float,
+        )
+
+        K_num[:, j] = (
+            f_plus
+            - f_minus
+        ) / (
+            2.0 * steps[j]
+        )
+
+    return K_num
+
+
+# ==========================================================
+# Test one strain state
+# ==========================================================
+
+eps0_tangent = 0.0004
+chi_x_tangent = 1.0e-5
+chi_y_tangent = 0.0
+
+q = np.array([
+    eps0_tangent,
+    chi_x_tangent,
+    chi_y_tangent,
+])
+
+
+# ==========================================================
+# Quast state at test point
+# ==========================================================
+
+eb_test, er_test = solver.strain_field(
+    eps0_tangent,
+    chi_x_tangent,
+    chi_y_tangent,
+)
+
+state_test = solver._compute_quast_state(
+    eps_rebar=er_test,
+    bulk_material=concrete,
+)
+
+print()
+print("TANGENT TEST STATE")
+print("------------------")
+
+print(
+    f"eps0      = "
+    f"{eps0_tangent:.8e}"
+)
+
+print(
+    f"chi_x     = "
+    f"{chi_x_tangent:.8e}"
+)
+
+print(
+    f"chi_y     = "
+    f"{chi_y_tangent:.8e}"
+)
+
+print(
+    f"eps_c_ref = "
+    f"{state_test['eps_c_ref'] * 1000.0:.6f} mm/m"
+)
+
+print(
+    f"VMB       = "
+    f"{state_test['vmb']:.8f}"
+)
+
+print(
+    f"dVMB      = "
+    f"{state_test['dvmb_deps_ref']:.8e}"
+)
+
+print(
+    f"gov_idx   = "
+    f"{state_test['governing_index']}"
+)
+
+
+# ==========================================================
+# Analytical tangent
+# ==========================================================
+
+N, Mx, My, K_ana = (
+    solver.integrate_with_tangent(
+        eps0_tangent,
+        chi_x_tangent,
+        chi_y_tangent,
+    )
+)
+
+
+# ==========================================================
+# Numerical tangent
+# ==========================================================
+
+K_num = numerical_jacobian_central(
+    solver,
+    q,
+)
+
+
+# ==========================================================
+# Comparison
+# ==========================================================
+
+# ==========================================================
+# Comparison
+# ==========================================================
+
+difference = (
+    K_ana
+    - K_num
+)
+
+# Use one global scale for the complete tangent matrix.
+# This avoids meaningless relative errors for matrix entries
+# whose theoretical value is approximately zero.
+K_scale = max(
+    float(
+        np.max(
+            np.abs(K_num)
+        )
+    ),
+    1.0,
+)
+
+scaled_error = (
+    np.abs(difference)
+    / K_scale
+)
+
+max_error = float(
+    np.max(
+        scaled_error
+    )
+)
+
+
+print()
+print("K analytisch:")
+print(K_ana)
+
+print()
+print("K numerisch:")
+print(K_num)
+
+print()
+print("Differenz:")
+print(difference)
+
+print()
+print("Global skalierte Abweichung:")
+print(scaled_error)
+
+print()
+print(
+    "Maximale global skalierte Abweichung:",
+    max_error,
+)
+
+
+# ==========================================================
+# Check
+# ==========================================================
+
+assert max_error < 1.0e-4, (
+    "Analytical tangent does not agree with numerical "
+    "differentiation. "
+    f"Maximum globally scaled error = {max_error:.6e}"
+)
+
+print()
+print(
+    "Analytical and numerical tangents agree."
+)
