@@ -867,15 +867,93 @@ def plot_moment_curvature(mc_data, title=""):
     direction = mc_data.get("direction", "x")
     M_label = f"M{direction}" if direction else "M"
 
-    uc_pos = mc_data.get("ultimate_chi_pos")
-    uc_neg = mc_data.get("ultimate_chi_neg")
-    chi_min_plot = (uc_neg * 1e6 * 1.05) if uc_neg is not None else chi.min()
-    chi_max_plot = (uc_pos * 1e6 * 1.05) if uc_pos is not None else chi.max()
-    mask = (chi >= chi_min_plot) & (chi <= chi_max_plot)
-    if np.sum(mask) < 10:
-        mask = np.ones(len(chi), dtype=bool)
+    uc_pos = mc_data.get(
+        "ultimate_chi_pos"
+    )
 
-    ax.plot(chi[mask], M[mask], 'b-', lw=1.5, label=f"{M_label}-χ")
+    uc_neg = mc_data.get(
+        "ultimate_chi_neg"
+    )
+
+
+    # ==========================================================
+    # Limit curve to the actual ultimate points
+    # ==========================================================
+
+    mask = np.ones(
+        len(chi),
+        dtype=bool,
+    )
+
+
+    # Positive branch
+    if uc_pos is not None:
+
+        chi_u_pos_km = (
+            uc_pos
+            * 1.0e6
+        )
+
+        mask &= (
+            chi
+            <= chi_u_pos_km
+        )
+
+
+    # Negative branch
+    if uc_neg is not None:
+
+        chi_u_neg_km = (
+            uc_neg
+            * 1.0e6
+        )
+
+        mask &= (
+            chi
+            >= chi_u_neg_km
+        )
+
+
+    # ==========================================================
+    # Plot only admissible curvature range
+    # ==========================================================
+
+    ax.plot(
+        chi[mask],
+        M[mask],
+        'b-',
+        lw=1.5,
+        label=f"{M_label}-χ",
+    )
+
+    if (
+    uc_neg is not None
+    or uc_pos is not None):
+
+        x_min = (
+            uc_neg * 1.0e6
+            if uc_neg is not None
+            else chi[mask].min()
+        )
+
+        x_max = (
+            uc_pos * 1.0e6
+            if uc_pos is not None
+            else chi[mask].max()
+        )
+
+        margin = (
+            0.02
+            * max(
+                x_max - x_min,
+                1.0,
+            )
+        )
+
+        ax.set_xlim(
+            x_min - margin,
+            x_max + margin,
+        )
 
     # Collect key-point lines for the numerical legend.
     legend_lines = []

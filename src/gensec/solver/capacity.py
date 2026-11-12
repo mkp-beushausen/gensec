@@ -1413,7 +1413,7 @@ class NMDiagram:
     # ==================================================================
 
     def generate_moment_curvature(self, N_fixed, chi_max=None,
-                                  n_chi=100, direction='x'):
+                                  n_chi=200, direction='x'):
         r"""
         Generate the moment-curvature diagram at fixed axial force.
 
@@ -1524,31 +1524,209 @@ class NMDiagram:
             if eps_ct is not None and eps_ct > 0:
                 eps_cr = float(eps_ct)
 
-        # Scan both positive and negative curvature
-        results_pos = self._scan_chi_vectorized(
-            N_fixed, 0, chi_max, n_chi, direction, eps_cr=eps_cr)
-        results_neg = self._scan_chi_vectorized(
-            N_fixed, 0, -chi_max, n_chi, direction, eps_cr=eps_cr)
+        # ==========================================================
+        # 1. Coarse scan to locate the ultimate curvature
+        # ==========================================================
+        n_chi_search = max(
+            min(n_chi, 200),
+            100,
+        )
 
-        # Merge: negative reversed + positive
+        results_pos_search = self._scan_chi_vectorized(
+            N_fixed,
+            0.0,
+            chi_max,
+            n_chi_search,
+            direction,
+            eps_cr=eps_cr,
+        )
+
+        results_neg_search = self._scan_chi_vectorized(
+            N_fixed,
+            0.0,
+            -chi_max,
+            n_chi_search,
+            direction,
+            eps_cr=eps_cr,
+        )
+
+
+        # ==========================================================
+        # 2. Determine refined scan limits
+        # ==========================================================
+
+        u_pos_search = results_pos_search.get(
+            "ultimate_chi"
+        )
+
+        u_neg_search = results_neg_search.get(
+            "ultimate_chi"
+        )
+
+
+        if u_pos_search is not None:
+
+            chi_end_pos = min(
+                float(chi_max),
+                float(u_pos_search) * 1.02,
+            )
+
+        else:
+
+            chi_end_pos = float(
+                chi_max
+            )
+
+
+        if u_neg_search is not None:
+
+            chi_end_neg = max(
+                float(-chi_max),
+                float(u_neg_search) * 1.02,
+            )
+
+        else:
+
+            chi_end_neg = float(
+                -chi_max
+            )
+
+
+        # ==========================================================
+        # 3. Refined scan inside the actual ultimate range
+        # ==========================================================
+        #
+        # n_chi now represents the number of points PER BRANCH
+        # inside the physically relevant curvature interval.
+        # ==========================================================
+        results_pos = self._scan_chi_vectorized(
+            N_fixed,
+            0.0,
+            chi_end_pos,
+            n_chi,
+            direction,
+            eps_cr=eps_cr,
+        )
+
+        results_neg = self._scan_chi_vectorized(
+            N_fixed,
+            0.0,
+            chi_end_neg,
+            n_chi,
+            direction,
+            eps_cr=eps_cr,
+        )
+        u_pos = results_pos.get("ultimate_chi")
+        u_neg = results_neg.get("ultimate_chi")
+        # ==========================================================
+        # 6. Merge negative and positive branches
+        # ==========================================================
+
         chi_all = np.concatenate([
-            results_neg["chi"][::-1], results_pos["chi"][1:]])
+            results_neg["chi"][::-1],
+            results_pos["chi"][1:],
+        ])
+
         M_all = np.concatenate([
-            results_neg["M"][::-1], results_pos["M"][1:]])
+            results_neg["M"][::-1],
+            results_pos["M"][1:],
+        ])
+
         eps_min_all = np.concatenate([
             results_neg["eps_min"][::-1],
-            results_pos["eps_min"][1:]])
+            results_pos["eps_min"][1:],
+        ])
+
         eps_max_all = np.concatenate([
             results_neg["eps_max"][::-1],
-            results_pos["eps_max"][1:]])
+            results_pos["eps_max"][1:],
+        ])
+
+
+        # ==========================================================
+        # 7. Merge strain-limit status
+        # ==========================================================
+
+        strain_ok_all = np.concatenate([
+            results_neg[
+                "strain_limits_ok"
+            ][::-1],
+
+            results_pos[
+                "strain_limits_ok"
+            ][1:],
+        ])
+        # ==========================================================
+        # Limit exported M-chi curve to the ultimate points
+        # ==========================================================
+
+        curve_mask = np.ones(
+            len(chi_all),
+            dtype=bool,
+        )
+        chi_scale = max(
+            abs(float(u_pos))
+            if u_pos is not None
+            else 0.0,
+            abs(float(u_neg))
+            if u_neg is not None
+            else 0.0,
+            1.0e-12,)
+        chi_tol = max(
+            1.0e-14,
+            1.0e-10 * chi_scale,
+        )
+
+        if u_pos is not None:
+
+            curve_mask &= (
+                chi_all <= u_pos + chi_tol
+            )
+
+        if u_neg is not None:
+
+            curve_mask &= (
+                chi_all >= u_neg - chi_tol
+            )
+
+
+        chi_all = chi_all[
+            curve_mask
+        ]
+
+        M_all = M_all[
+            curve_mask
+        ]
+
+        eps_min_all = eps_min_all[
+            curve_mask
+        ]
+
+        eps_max_all = eps_max_all[
+            curve_mask
+        ]
+
+        strain_ok_all = strain_ok_all[
+            curve_mask
+        ]
+
+        # # Merge: negative reversed + positive
+        # chi_all = np.concatenate([
+        #     results_neg["chi"][::-1], results_pos["chi"][1:]])
+        # M_all = np.concatenate([
+        #     results_neg["M"][::-1], results_pos["M"][1:]])
+        # eps_min_all = np.concatenate([
+        #     results_neg["eps_min"][::-1],
+        #     results_pos["eps_min"][1:]])
+        # eps_max_all = np.concatenate([
+        #     results_neg["eps_max"][::-1],
+        #     results_pos["eps_max"][1:]])
 
         # Ductility ratios: μ = χ_ultimate / χ_yield
         mu_pos = None
         mu_neg = None
         y_pos = results_pos.get("yield_chi")
-        u_pos = results_pos.get("ultimate_chi")
         y_neg = results_neg.get("yield_chi")
-        u_neg = results_neg.get("ultimate_chi")
         if (y_pos is not None and u_pos is not None
                 and abs(y_pos) > 0):
             mu_pos = abs(u_pos / y_pos)
@@ -1720,9 +1898,18 @@ class NMDiagram:
                 yield_M = M
 
             # Detect ultimate
-            if ultimate_chi is None and abs(chi) > 0:
-                if (all_eps.min() <= emb * 0.99
-                        or all_eps.max() >= exg * 0.99):
+            if (
+                ultimate_chi is None
+                and abs(chi) > 0.0
+            ):
+                strain_limits_ok = (
+                    sv.strains_within_limits(
+                        eps0,
+                        chi_x,
+                        chi_y,
+                    )
+                )
+                if not strain_limits_ok:
                     ultimate_chi = chi
                     ultimate_M = M
 
@@ -1738,6 +1925,73 @@ class NMDiagram:
     # ------------------------------------------------------------------
     # METHOD 1 — _scan_chi_vectorized   (replaces _scan_chi calls)
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Event interpolation helper
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _interpolate_event(
+        chi_0,
+        chi_1,
+        M_0,
+        M_1,
+        g_0,
+        g_1,
+    ):
+        """
+        Linear interpolation of an event between two scan points.
+
+        Expected:
+            g_0 < 0   before the event
+            g_1 >= 0  at / after the event
+        """
+
+        denominator = (
+            g_1 - g_0
+        )
+
+        if (
+            not np.isfinite(denominator)
+            or abs(denominator) < 1.0e-15
+        ):
+            factor = 1.0
+
+        else:
+            factor = (
+                -g_0
+                / denominator
+            )
+
+        factor = float(
+            np.clip(
+                factor,
+                0.0,
+                1.0,
+            )
+        )
+
+        chi_event = (
+            chi_0
+            + factor
+            * (
+                chi_1 - chi_0
+            )
+        )
+
+        M_event = (
+            M_0
+            + factor
+            * (
+                M_1 - M_0
+            )
+        )
+
+        return (
+            float(chi_event),
+            float(M_event),
+            factor,
+        )
+ 
 
     def _scan_chi_vectorized(self, N_fixed, chi_start, chi_end, n_points,
                             direction, eps_cr=None):
@@ -1875,100 +2129,1118 @@ class NMDiagram:
         # --- 4. Extract moments along the requested direction ---
         Ms = Mx_arr if direction == 'x' else My_arr
 
-        # --- 5. Batch strain field for event detection ---
-        #
-        # Bulk: ε_b[k, i] = ε₀[k] + χ_x[k]·ly[i] − χ_y[k]·lx[i]
-        # Shape: (n_points, n_bulk_fibers)
-        eb = (eps0_arr[:, None]
-            + chi_x_arr[:, None] * sv._ly_bulk[None, :]
-            - chi_y_arr[:, None] * sv._lx_bulk[None, :])
+        # ==========================================================
+        # 5. Batch strain fields for event detection
+        # ==========================================================
 
-        n_rebars = len(sv.sec.y_rebars)
+        # ----------------------------------------------------------
+        # Bulk section strains
+        # ----------------------------------------------------------
+
+        eb = (
+            eps0_arr[:, None]
+            + chi_x_arr[:, None]
+            * sv._ly_bulk[None, :]
+            - chi_y_arr[:, None]
+            * sv._lx_bulk[None, :]
+        )
+
+
+        # ----------------------------------------------------------
+        # Rebar strains
+        # ----------------------------------------------------------
+
+        n_rebars = len(
+            sv.sec.y_rebars
+        )
+
         if n_rebars > 0:
-            # Rebar: ε_r[k, i] = ε₀[k] + χ_x[k]·ly_r[i] − χ_y[k]·lx_r[i]
-            er = (eps0_arr[:, None]
-                + chi_x_arr[:, None] * sv._ly_rebar[None, :]
-                - chi_y_arr[:, None] * sv._lx_rebar[None, :])
-            # Concatenate for global min/max
-            all_eps = np.concatenate([eb, er], axis=1)
+
+            er = (
+                eps0_arr[:, None]
+                + chi_x_arr[:, None]
+                * sv._ly_rebar[None, :]
+                - chi_y_arr[:, None]
+                * sv._lx_rebar[None, :]
+            )
+
         else:
-            er = np.empty((n_points, 0), dtype=np.float64)
-            all_eps = eb
 
-        eps_mins = all_eps.min(axis=1)
-        eps_maxs = all_eps.max(axis=1)
+            er = np.empty(
+                (n_points, 0),
+                dtype=np.float64,
+            )
 
-        # --- 6. Vectorized event detection ---
+
+        # ----------------------------------------------------------
+        # Tendon section strains
+        # ----------------------------------------------------------
+
+        if sv._has_tendons:
+
+            et_sec = (
+                eps0_arr[:, None]
+                + chi_x_arr[:, None]
+                * sv._ly_tendon[None, :]
+                - chi_y_arr[:, None]
+                * sv._lx_tendon[None, :]
+            )
+
+        else:
+
+            et_sec = np.empty(
+                (n_points, 0),
+                dtype=np.float64,
+            )
+
+
+        # ==========================================================
+        # Display extrema
+        # ==========================================================
         #
-        # Events are detected as the *first* curvature step (smallest
-        # |chi|) where the condition holds, restricted to steps that
-        # (a) have nonzero curvature and (b) converged in the
-        # equilibrium solve.  ``np.argmax`` on a boolean array returns
-        # the index of the first ``True``.
-        cracking_chi = cracking_M = None
-        yield_chi = yield_M = None
-        ultimate_chi = ultimate_M = None
+        # These arrays are retained for plotting and export.
+        # Material admissibility is NOT assessed from one shared
+        # global minimum or maximum.
+        # ==========================================================
 
-        nonzero = (np.abs(chis) > 0) & feasible
-        valid = nonzero & converged
+        display_strain_parts = []
+
+
+        # ----------------------------------------------------------
+        # Effective bulk strains, including material offsets
+        # ----------------------------------------------------------
+
+        eb_effective = np.zeros_like(
+            eb,
+            dtype=np.float64,
+        )
+
+        for mat, idx in sv._bulk_groups:
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            eb_effective[:, idx] = (
+                eb[:, idx]
+                + sv._bulk_offset(idx)
+            )
+
+        display_strain_parts.append(
+            eb_effective
+        )
+
+
+        # ----------------------------------------------------------
+        # Rebar strains
+        # ----------------------------------------------------------
+
+        if n_rebars > 0:
+
+            display_strain_parts.append(
+                er
+            )
+
+
+        # ----------------------------------------------------------
+        # Tendon total strains
+        # ----------------------------------------------------------
+
+        et_total_display = np.zeros_like(
+            et_sec,
+            dtype=np.float64,
+        )
+
+        if sv._has_tendons:
+
+            for (
+                mat,
+                _bulk_mat,
+                idx,
+                eps_init,
+            ) in sv._tendon_groups:
+
+                idx = np.asarray(
+                    idx,
+                    dtype=int,
+                )
+
+                eps_init = np.asarray(
+                    eps_init,
+                    dtype=np.float64,
+                )
+
+                et_total_display[:, idx] = (
+                    et_sec[:, idx]
+                    + eps_init[None, :]
+                )
+
+            display_strain_parts.append(
+                et_total_display
+            )
+
+
+        all_eps_display = np.concatenate(
+            display_strain_parts,
+            axis=1,
+        )
+
+        eps_mins = all_eps_display.min(
+            axis=1
+        )
+
+        eps_maxs = all_eps_display.max(
+            axis=1
+        )
+
+
+        # ==========================================================
+        # 6. Material-specific strain-limit evaluation
+        # ==========================================================
+
+        strain_limits_ok = np.ones(
+            n_points,
+            dtype=bool,
+        )
+        # Positive value means that at least one strain limit is exceeded.
+        # Zero or negative means admissible.
+
+        max_limit_excess = np.full(
+            n_points,
+            -np.inf,
+            dtype=np.float64,
+        )
+
+        governing_limit_type = np.full(
+            n_points,
+            "",
+            dtype=object,
+        )
+
+        governing_limit_index = np.full(
+            n_points,
+            -1,
+            dtype=int,
+        )
+
+        governing_strain = np.full(
+            n_points,
+            np.nan,
+            dtype=np.float64,
+        )
+
+        governing_strain_limit = np.full(
+            n_points,
+            np.nan,
+            dtype=np.float64,
+        )
+
+
+        # ==========================================================
+        # Bulk-material limits
+        # ==========================================================
+
+        for mat, idx in sv._bulk_groups:
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            e_group = (
+                eb[:, idx]
+                + sv._bulk_offset(idx)
+            )
+
+            eps_min = float(
+                mat.eps_min
+            )
+
+            eps_max = float(
+                mat.eps_max
+            )
+
+            # Positive values indicate a violation.
+            lower_excess = (
+                eps_min
+                - e_group
+            )
+
+            upper_excess = (
+                e_group
+                - eps_max
+            )
+
+            group_excess = np.maximum(
+                lower_excess,
+                upper_excess,
+            )
+
+            group_max_excess = group_excess.max(
+                axis=1
+            )
+
+            group_local_index = group_excess.argmax(
+                axis=1
+            )
+
+            group_ok = (
+                group_max_excess <= 0.0
+            )
+
+            strain_limits_ok &= group_ok
+
+            update = (
+                group_max_excess
+                > max_limit_excess
+            )
+
+            if np.any(update):
+
+                row = np.where(update)[0]
+
+                local = group_local_index[
+                    update
+                ]
+
+                global_index = idx[
+                    local
+                ]
+
+                strain_value = e_group[
+                    row,
+                    local,
+                ]
+
+                lower_governs = (
+                    lower_excess[
+                        row,
+                        local,
+                    ]
+                    >= upper_excess[
+                        row,
+                        local,
+                    ]
+                )
+
+                strain_limit = np.where(
+                    lower_governs,
+                    eps_min,
+                    eps_max,
+                )
+
+                max_limit_excess[update] = (
+                    group_max_excess[update]
+                )
+
+                governing_limit_type[update] = (
+                    "bulk_min"
+                )
+
+                governing_limit_type[
+                    update & (~lower_governs)
+                ] = "bulk_max"
+
+                governing_limit_index[update] = (
+                    global_index
+                )
+
+                governing_strain[update] = (
+                    strain_value
+                )
+
+                governing_strain_limit[update] = (
+                    strain_limit
+                )
+                print(
+                    type(mat).__name__,
+                    mat.eps_min,
+                    mat.eps_max,
+                )
+
+
+        # ==========================================================
+        # Reinforcement limits
+        # ==========================================================
+
+        for (
+            mat,
+            _bulk_mat,
+            idx,
+        ) in sv._rebar_groups:
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            e_group = er[:, idx]
+
+            eps_min = float(
+                mat.eps_min
+            )
+
+            eps_max = float(
+                mat.eps_max
+            )
+
+            lower_excess = (
+                eps_min
+                - e_group
+            )
+
+            upper_excess = (
+                e_group
+                - eps_max
+            )
+
+            group_excess = np.maximum(
+                lower_excess,
+                upper_excess,
+            )
+
+            group_max_excess = group_excess.max(
+                axis=1
+            )
+
+            group_local_index = group_excess.argmax(
+                axis=1
+            )
+
+            group_ok = (
+                group_max_excess <= 0.0
+            )
+
+            strain_limits_ok &= group_ok
+
+            update = (
+                group_max_excess
+                > max_limit_excess
+            )
+
+            if np.any(update):
+
+                row = np.where(update)[0]
+
+                local = group_local_index[
+                    update
+                ]
+
+                global_index = idx[
+                    local
+                ]
+
+                strain_value = e_group[
+                    row,
+                    local,
+                ]
+
+                lower_governs = (
+                    lower_excess[
+                        row,
+                        local,
+                    ]
+                    >= upper_excess[
+                        row,
+                        local,
+                    ]
+                )
+
+                strain_limit = np.where(
+                    lower_governs,
+                    eps_min,
+                    eps_max,
+                )
+
+                max_limit_excess[update] = (
+                    group_max_excess[update]
+                )
+
+                governing_limit_type[update] = (
+                    np.where(
+                        lower_governs,
+                        "rebar_min",
+                        "rebar_max",
+                    )
+                )
+
+                governing_limit_index[update] = (
+                    global_index
+                )
+
+                governing_strain[update] = (
+                    strain_value
+                )
+
+                governing_strain_limit[update] = (
+                    strain_limit
+                )
+
+
+        # ----------------------------------------------------------
+        # 6c. Prestressing tendons
+        # ----------------------------------------------------------
+        #
+        # Tendon limits apply to the TOTAL strain:
+        #
+        #     eps_tot = eps_sec + eps_init
+        #
+        # The upper limit may be the global material limit or the
+        # German individual limit:
+        #
+        #     eps_ud,d = min(
+        #         0.9 * eps_uk,
+        #         eps_init + 0.025,
+        #     )
+        # ----------------------------------------------------------
+        # ==========================================================
+        # Tendon limits
+        # ==========================================================
+
+        if sv._has_tendons:
+
+            for (
+                mat,
+                _bulk_mat,
+                idx,
+                eps_init,
+            ) in sv._tendon_groups:
+
+                idx = np.asarray(
+                    idx,
+                    dtype=int,
+                )
+
+                eps_init = np.asarray(
+                    eps_init,
+                    dtype=np.float64,
+                )
+
+                e_tot = (
+                    et_sec[:, idx]
+                    + eps_init[None, :]
+                )
+
+                eps_min = float(
+                    mat.eps_min
+                )
+
+                eps_ud_limit = (
+                    sv._tendon_eps_ud_limits(
+                        material=mat,
+                        eps_init=eps_init,
+                        use_german_eps_ud=getattr(
+                            mat,
+                            "use_german_eps_ud",
+                            False,
+                        ),
+                    )
+                )
+
+                lower_excess = (
+                    eps_min
+                    - e_tot
+                )
+
+                upper_excess = (
+                    e_tot
+                    - eps_ud_limit[None, :]
+                )
+
+                group_excess = np.maximum(
+                    lower_excess,
+                    upper_excess,
+                )
+
+                group_max_excess = group_excess.max(
+                    axis=1
+                )
+
+                group_local_index = group_excess.argmax(
+                    axis=1
+                )
+
+                group_ok = (
+                    group_max_excess <= 0.0
+                )
+
+                strain_limits_ok &= group_ok
+
+                update = (
+                    group_max_excess
+                    > max_limit_excess
+                )
+
+                if np.any(update):
+
+                    row = np.where(update)[0]
+
+                    local = group_local_index[
+                        update
+                    ]
+
+                    global_index = idx[
+                        local
+                    ]
+
+                    strain_value = e_tot[
+                        row,
+                        local,
+                    ]
+
+                    lower_governs = (
+                        lower_excess[
+                            row,
+                            local,
+                        ]
+                        >= upper_excess[
+                            row,
+                            local,
+                        ]
+                    )
+
+                    strain_limit = np.where(
+                        lower_governs,
+                        eps_min,
+                        eps_ud_limit[
+                            local
+                        ],
+                    )
+
+                    max_limit_excess[update] = (
+                        group_max_excess[update]
+                    )
+
+                    governing_limit_type[update] = (
+                        np.where(
+                            lower_governs,
+                            "tendon_min",
+                            "tendon_max",
+                        )
+                    )
+
+                    governing_limit_index[update] = (
+                        global_index
+                    )
+
+                    governing_strain[update] = (
+                        strain_value
+                    )
+
+                    governing_strain_limit[update] = (
+                        strain_limit
+                    )
+
+        # ==========================================================
+        # 7. Vectorized event detection
+        # ==========================================================
+
+        cracking_chi = None
+        cracking_M = None
+
+        yield_chi = None
+        yield_M = None
+
+        ultimate_chi = None
+        ultimate_M = None
+
+
+        # Only use:
+        # - non-zero curvature points,
+        # - feasible points,
+        # - converged axial-equilibrium points.
+
+        nonzero = (
+            np.abs(chis) > 0.0
+        ) & feasible
+
+        valid = (
+            nonzero
+            & converged
+        )
+
 
         diagnostics = {
-            "chi_max_scanned": (float(np.abs(chis).max())
-                                if chis.size else 0.0),
-            "n_points": int(n_points),
-            "n_converged": int(converged.sum()),
+            "chi_max_scanned": (
+                float(
+                    np.abs(chis).max()
+                )
+                if chis.size
+                else 0.0
+            ),
+            "n_points": int(
+                n_points
+            ),
+            "n_converged": int(
+                converged.sum()
+            ),
             "cracking_reason": None,
             "ultimate_reason": None,
         }
 
-        eb_max = eb.max(axis=1)
 
-        # 6a. Cracking: first step where max bulk tensile strain >= eps_cr.
+        # ==========================================================
+        # 7a. First cracking
+        # ==========================================================
+
+        eb_max = eb_effective.max(
+            axis=1
+        )
+
         if eps_cr is None:
-            diagnostics["cracking_reason"] = "no_ec2_properties"
+
+            diagnostics[
+                "cracking_reason"
+            ] = "no_ec2_properties"
+
         else:
-            crack_mask = valid & (eb_max >= eps_cr)
-            if np.any(crack_mask):
-                k = int(np.argmax(crack_mask))
-                cracking_chi = float(chis[k])
-                cracking_M = float(Ms[k])
+
+            crack_mask = (
+                valid
+                & (
+                    eb_max >= eps_cr
+                )
+            )
+
+            if np.any(
+                crack_mask
+            ):
+
+                k = int(
+                    np.argmax(
+                        crack_mask
+                    )
+                )
+
+                cracking_chi = float(
+                    chis[k]
+                )
+
+                cracking_M = float(
+                    Ms[k]
+                )
+
             else:
-                # Distinguish a physically uncracked section (bulk never
-                # reaches tension within the scanned range, e.g. high
-                # compression) from a convergence / window failure.
-                reached = eb_max[valid]
+
+                reached = eb_max[
+                    valid
+                ]
+
                 if reached.size == 0:
-                    diagnostics["cracking_reason"] = "no_convergence"
+
+                    diagnostics[
+                        "cracking_reason"
+                    ] = "no_convergence"
+
                 elif reached.max() < eps_cr:
-                    diagnostics["cracking_reason"] = "no_tension_in_range"
+
+                    diagnostics[
+                        "cracking_reason"
+                    ] = "no_tension_in_range"
+
                 else:
-                    diagnostics["cracking_reason"] = "below_threshold"
 
-        # 6b. Yield: first step where max |eps_rebar| >= eps_yd_min * 0.99.
-        if self._eps_yd_min is not None and n_rebars > 0:
-            er_abs_max = np.abs(er).max(axis=1)
-            yield_mask = valid & (er_abs_max >= self._eps_yd_min * 0.99)
-            if np.any(yield_mask):
-                k = int(np.argmax(yield_mask))
-                yield_chi = float(chis[k])
-                yield_M = float(Ms[k])
+                    diagnostics[
+                        "cracking_reason"
+                    ] = "below_threshold"
 
-        # 6c. Ultimate: first step where any strain limit is reached,
-        #     eps_min <= eps_cu * 0.99  or  eps_max >= eps_max_global * 0.99.
-        ult_mask = valid & (
-            (eps_mins <= emb * 0.99) | (eps_maxs >= exg * 0.99))
-        if np.any(ult_mask):
-            k = int(np.argmax(ult_mask))
-            ultimate_chi = float(chis[k])
-            ultimate_M = float(Ms[k])
-        elif not np.any(valid):
-            diagnostics["ultimate_reason"] = "no_convergence"
+
+       # ==========================================================
+        # First reinforcement yield with interpolation
+        # ==========================================================
+
+        if (
+            self._eps_yd_min is not None
+            and n_rebars > 0
+        ):
+
+            eps_yd_limit = float(
+                self._eps_yd_min
+            )
+
+            er_abs_max = np.abs(
+                er
+            ).max(
+                axis=1
+            )
+
+            # Event function:
+            #
+            #     g_y = max(abs(eps_s)) - eps_yd
+            #
+            # g_y < 0 : elastic
+            # g_y = 0 : first yield
+            # g_y > 0 : yielded
+            yield_function = (
+                er_abs_max
+                - eps_yd_limit
+            )
+
+            yield_mask = (
+                valid
+                & (
+                    yield_function >= 0.0
+                )
+            )
+
+            if np.any(
+                yield_mask
+            ):
+
+                k = int(
+                    np.argmax(
+                        yield_mask
+                    )
+                )
+
+                if (
+                    k > 0
+                    and valid[k - 1]
+                    and yield_function[k - 1] < 0.0
+                    and np.isfinite(Ms[k - 1])
+                    and np.isfinite(Ms[k])
+                ):
+
+                    (
+                        yield_chi,
+                        yield_M,
+                        yield_factor,
+                    ) = self._interpolate_event(
+                        chi_0=chis[k - 1],
+                        chi_1=chis[k],
+                        M_0=Ms[k - 1],
+                        M_1=Ms[k],
+                        g_0=yield_function[k - 1],
+                        g_1=yield_function[k],
+                    )
+
+                else:
+
+                    yield_chi = float(
+                        chis[k]
+                    )
+
+                    yield_M = float(
+                        Ms[k]
+                    )
+
+                    yield_factor = 1.0
+
+                diagnostics[
+                    "yield_index"
+                ] = k
+
+                diagnostics[
+                    "yield_interpolation_factor"
+                ] = float(
+                    yield_factor
+                )
+
+                diagnostics[
+                    "yield_strain"
+                ] = float(
+                    eps_yd_limit
+                )
+
+
+        # ==========================================================
+        # 7c. Ultimate material-strain limit
+        # ==========================================================
+        #
+        # Ultimate is the first converged, feasible, non-zero-curvature
+        # point that violates at least one material-specific strain
+        # limit.
+        #
+        # Do not use one global exg/emb comparison here.
+        # ==========================================================
+
+        # ==========================================================
+        # Ultimate material limit with interpolation
+        # ==========================================================
+        #
+        # max_limit_excess is the event function:
+        #
+        #     g_u < 0 : all material limits satisfied
+        #     g_u = 0 : first material limit reached
+        #     g_u > 0 : at least one material limit exceeded
+        # ==========================================================
+
+        ultimate_mask = (
+            valid
+            & (
+                max_limit_excess >= 0.0
+            )
+        )
+
+        if np.any(
+            ultimate_mask
+        ):
+
+            k = int(
+                np.argmax(
+                    ultimate_mask
+                )
+            )
+
+            if (
+                k > 0
+                and valid[k - 1]
+                and max_limit_excess[k - 1] < 0.0
+                and np.isfinite(Ms[k - 1])
+                and np.isfinite(Ms[k])
+            ):
+
+                (
+                    ultimate_chi,
+                    ultimate_M,
+                    ultimate_factor,
+                ) = self._interpolate_event(
+                    chi_0=chis[k - 1],
+                    chi_1=chis[k],
+                    M_0=Ms[k - 1],
+                    M_1=Ms[k],
+                    g_0=max_limit_excess[k - 1],
+                    g_1=max_limit_excess[k],
+                )
+
+                # Interpolate extrema for CSV and output.
+                eps_min_event = (
+                    eps_mins[k - 1]
+                    + ultimate_factor
+                    * (
+                        eps_mins[k]
+                        - eps_mins[k - 1]
+                    )
+                )
+
+                eps_max_event = (
+                    eps_maxs[k - 1]
+                    + ultimate_factor
+                    * (
+                        eps_maxs[k]
+                        - eps_maxs[k - 1]
+                    )
+                )
+
+                # Replace the first inadmissible scan point with the
+                # interpolated boundary point. Later points remain outside
+                # the curve and are removed by the ultimate mask in
+                # generate_moment_curvature().
+                chis[k] = ultimate_chi
+                Ms[k] = ultimate_M
+                eps_mins[k] = eps_min_event
+                eps_maxs[k] = eps_max_event
+
+                # The interpolated point lies exactly on the boundary.
+                strain_limits_ok[k] = True
+                max_limit_excess[k] = 0.0
+
+                governing_strain[k] = (
+                    governing_strain_limit[k]
+                )
+
+            else:
+
+                ultimate_chi = float(
+                    chis[k]
+                )
+
+                ultimate_M = float(
+                    Ms[k]
+                )
+
+                ultimate_factor = 1.0
+
+            diagnostics[
+                "ultimate_index"
+            ] = k
+
+            diagnostics[
+                "ultimate_interpolation_factor"
+            ] = float(
+                ultimate_factor
+            )
+
+            diagnostics[
+                "ultimate_limit_type"
+            ] = str(
+                governing_limit_type[k]
+            )
+
+            diagnostics[
+                "ultimate_material_index"
+            ] = int(
+                governing_limit_index[k]
+            )
+
+            diagnostics[
+                "ultimate_strain"
+            ] = float(
+                governing_strain[k]
+            )
+
+            diagnostics[
+                "ultimate_strain_limit"
+            ] = float(
+                governing_strain_limit[k]
+            )
+
+            diagnostics[
+                "ultimate_excess"
+            ] = 0.0
+
+            print()
+            print("M-K ULTIMATE DIAGNOSTICS")
+            print("------------------------")
+
+            print(
+                f"direction       = {direction}"
+            )
+
+            print(
+                f"index           = {k}"
+            )
+
+            print(
+                f"chi             = "
+                f"{chis[k] * 1.0e6:.6f} 1/km"
+            )
+
+            print(
+                f"M               = "
+                f"{Ms[k] / 1.0e6:.6f} kNm"
+            )
+
+            print(
+                f"governing type  = "
+                f"{governing_limit_type[k]}"
+            )
+
+            print(
+                f"governing index = "
+                f"{governing_limit_index[k]}"
+            )
+
+            print(
+                f"strain          = "
+                f"{governing_strain[k] * 1000.0:.6f} mm/m"
+            )
+
+            print(
+                f"strain limit    = "
+                f"{governing_strain_limit[k] * 1000.0:.6f} mm/m"
+            )
+
+            print(
+                f"excess          = "
+                f"{max_limit_excess[k] * 1000.0:.6f} mm/m"
+            )
+
+            if k > 0:
+
+                print(
+                    f"previous point OK = "
+                    f"{strain_limits_ok[k - 1]}"
+                )
+
+                print(
+                    f"previous chi      = "
+                    f"{chis[k - 1] * 1.0e6:.6f} 1/km"
+                )
+
+            print(
+                f"ultimate point OK = "
+                f"{strain_limits_ok[k]}"
+            )
+
+        elif not np.any(
+            valid
+        ):
+
+            diagnostics[
+                "ultimate_reason"
+            ] = "no_convergence"
+
         else:
-            diagnostics["ultimate_reason"] = "limit_not_reached_in_range"
+
+            diagnostics[
+                "ultimate_reason"
+            ] = (
+                "limit_not_reached_in_range"
+            )
+            
+        # # --- 6. Vectorized event detection ---
+        # #
+        # # Events are detected as the *first* curvature step (smallest
+        # # |chi|) where the condition holds, restricted to steps that
+        # # (a) have nonzero curvature and (b) converged in the
+        # # equilibrium solve.  ``np.argmax`` on a boolean array returns
+        # # the index of the first ``True``.
+        # cracking_chi = cracking_M = None
+        # yield_chi = yield_M = None
+        # ultimate_chi = ultimate_M = None
+
+        # nonzero = (np.abs(chis) > 0) & feasible
+        # valid = nonzero & converged
+
+        # diagnostics = {
+        #     "chi_max_scanned": (float(np.abs(chis).max())
+        #                         if chis.size else 0.0),
+        #     "n_points": int(n_points),
+        #     "n_converged": int(converged.sum()),
+        #     "cracking_reason": None,
+        #     "ultimate_reason": None,
+        # }
+
+        # eb_max = eb.max(axis=1)
+
+        # # 6a. Cracking: first step where max bulk tensile strain >= eps_cr.
+        # if eps_cr is None:
+        #     diagnostics["cracking_reason"] = "no_ec2_properties"
+        # else:
+        #     crack_mask = valid & (eb_max >= eps_cr)
+        #     if np.any(crack_mask):
+        #         k = int(np.argmax(crack_mask))
+        #         cracking_chi = float(chis[k])
+        #         cracking_M = float(Ms[k])
+        #     else:
+        #         # Distinguish a physically uncracked section (bulk never
+        #         # reaches tension within the scanned range, e.g. high
+        #         # compression) from a convergence / window failure.
+        #         reached = eb_max[valid]
+        #         if reached.size == 0:
+        #             diagnostics["cracking_reason"] = "no_convergence"
+        #         elif reached.max() < eps_cr:
+        #             diagnostics["cracking_reason"] = "no_tension_in_range"
+        #         else:
+        #             diagnostics["cracking_reason"] = "below_threshold"
+
+        # # 6b. Yield: first step where max |eps_rebar| >= eps_yd_min * 0.99.
+        # if self._eps_yd_min is not None and n_rebars > 0:
+        #     er_abs_max = np.abs(er).max(axis=1)
+        #     yield_mask = valid & (er_abs_max >= self._eps_yd_min * 0.99)
+        #     if np.any(yield_mask):
+        #         k = int(np.argmax(yield_mask))
+        #         yield_chi = float(chis[k])
+        #         yield_M = float(Ms[k])
+
+        # # 6c. Ultimate: first step where any strain limit is reached,
+        # #     eps_min <= eps_cu * 0.99  or  eps_max >= eps_max_global * 0.99.
+        # ult_mask = valid & (
+        #     (eps_mins <= emb * 0.99) | (eps_maxs >= exg * 0.99))
+        # if np.any(ult_mask):
+        #     k = int(np.argmax(ult_mask))
+        #     ultimate_chi = float(chis[k])
+        #     ultimate_M = float(Ms[k])
+        # elif not np.any(valid):
+        #     diagnostics["ultimate_reason"] = "no_convergence"
+        # else:
+        #     diagnostics["ultimate_reason"] = "limit_not_reached_in_range"
 
         return {
             "chi": chis, "M": Ms,
-            "eps_min": eps_mins, "eps_max": eps_maxs,
+            "eps_min": eps_mins, "eps_max": eps_maxs, "strain_limits_ok": strain_limits_ok, "diagnostics": diagnostics,
             "yield_chi": yield_chi, "yield_M": yield_M,
             "ultimate_chi": ultimate_chi, "ultimate_M": ultimate_M,
             "cracking_chi": cracking_chi, "cracking_M": cracking_M,
