@@ -1,3 +1,4 @@
+from gensec.materials import steel
 from gensec.materials.steel import Steel
 import numpy as np
 
@@ -27,23 +28,23 @@ from gensec.materials.ec2_bridge import prestress_from_class
 #     #k=1.9961
 # )
 
-mat=prestress_from_class(
-    ps_class="St1570/1770",
-    ls="F",
-    NA="EC2",
-    eps_ud_factor=0.9,
-    diagram="inclined",
-    works_in_compression=True,
-)
-
-# mat= Steel(
-#     fyk=500.0,
-#     gamma_s=1.15,
-#     Es=200000,
-#     k_hardening=1.0,
-#     eps_su=0.01,
-#     works_in_compression=True
+# mat=prestress_from_class(
+#     ps_class="St1570/1770",
+#     ls="F",
+#     NA="EC2",
+#     eps_ud_factor=0.9,
+#     diagram="inclined",
+#     works_in_compression=True,
 # )
+
+mat= Steel(
+    fyk=500.0,
+    gamma_s=1.15,
+    Es=200000,
+    k_hardening=1.0,
+    eps_su=0.01,
+    works_in_compression=True
+)
     
 
 
@@ -118,82 +119,73 @@ for i, (e, s, et) in enumerate(
     )
 
 
-print()
-print("SPANNSTAHL EC2")
-print("----------------------------")
-print(f"ls        = {mat.ec2.ls}")
-print(f"NA        = {mat.ec2.NA}")
-print(f"gamma_s   = {mat.ec2.gamma_s:.4f}")
-print(f"f_p01k    = {mat.ec2.f_p01k:.4f} MPa")
-print(f"f_pk      = {mat.ec2.f_pk:.4f} MPa")
-print(f"f_p01d    = {mat.ec2.f_p01d:.4f} MPa")
-print(f"f_pd      = {mat.ec2.f_pd:.4f} MPa")
-print(f"eps_uk    = {mat.ec2.eps_uk:.6f}")
-print(f"eps_ud    = {mat.ec2.eps_ud:.6f}")
-print(f"Ep        = {mat.ec2.Ep:.4f} MPa")
+# print()
+# print("SPANNSTAHL EC2")
+# print("----------------------------")
+# print(f"ls        = {mat.ec2.ls}")
+# print(f"NA        = {mat.ec2.NA}")
+# print(f"gamma_s   = {mat.ec2.gamma_s:.4f}")
+# print(f"f_p01k    = {mat.ec2.f_p01k:.4f} MPa")
+# print(f"f_pk      = {mat.ec2.f_pk:.4f} MPa")
+# print(f"f_p01d    = {mat.ec2.f_p01d:.4f} MPa")
+# print(f"f_pd      = {mat.ec2.f_pd:.4f} MPa")
+# print(f"eps_uk    = {mat.ec2.eps_uk:.6f}")
+# print(f"eps_ud    = {mat.ec2.eps_ud:.6f}")
+# print(f"Ep        = {mat.ec2.Ep:.4f} MPa")
 
-print()
-print("SPANNSTAHL-PARAMETER")
-print("--------------------")
+# print()
+# print("SPANNSTAHL-PARAMETER")
+# print("--------------------")
 
-# Grundwerte Material
-print(f"Ep                  = {mat.Ep:.8f} N/mm²")
-print(f"f_p01d              = {mat.f_p01d:.8f} N/mm²")
-print(f"sigma_ud            = {mat.sigma_ud:.8f} N/mm²")
-print(f"eps_el              = {mat.eps_el:.8f} [-]")
-print(f"eps_el              = {mat.eps_el * 1000:.8f} mm/m")
-print(f"eps_ud              = {mat.eps_ud:.8f} [-]")
-print(f"eps_ud              = {mat.eps_ud * 1000:.8f} mm/m")
-print(f"E_hard              = {mat.E_hard:.8f} N/mm²")
-print(f"works_in_compression = {mat.works_in_compression}")
+# # Grundwerte Material
+# print(f"Ep                  = {mat.Ep:.8f} N/mm²")
+# print(f"f_p01d              = {mat.f_p01d:.8f} N/mm²")
+# print(f"sigma_ud            = {mat.sigma_ud:.8f} N/mm²")
+# print(f"eps_el              = {mat.eps_el:.8f} [-]")
+# print(f"eps_el              = {mat.eps_el * 1000:.8f} mm/m")
+# print(f"eps_ud              = {mat.eps_ud:.8f} [-]")
+# print(f"eps_ud              = {mat.eps_ud * 1000:.8f} mm/m")
+# print(f"E_hard              = {mat.E_hard:.8f} N/mm²")
+# print(f"works_in_compression = {mat.works_in_compression}")
 
-# EC2-Ausgangswerte
-if hasattr(mat, "ec2"):
+# # EC2-Ausgangswerte
+# if hasattr(mat, "ec2"):
 
-    print()
-    print("EC2-PARAMETER")
-    print("-------------")
+#     print()
+#     print("EC2-PARAMETER")
+#     print("-------------")
 
-    print(f"f_p01k              = {mat.ec2.f_p01k:.8f} N/mm²")
-    print(f"f_pk                = {mat.ec2.f_pk:.8f} N/mm²")
-    print(f"gamma_s             = {mat.ec2.gamma_s:.8f}")
-    print(f"f_p01d              = {mat.ec2.f_p01d:.8f} N/mm²")
-    print(f"f_pd                = {mat.ec2.f_pd:.8f} N/mm²")
-    print(f"Ep                   = {mat.ec2.Ep:.8f} N/mm²")
+#     print(f"f_p01k              = {mat.ec2.f_p01k:.8f} N/mm²")
+#     print(f"f_pk                = {mat.ec2.f_pk:.8f} N/mm²")
+#     print(f"gamma_s             = {mat.ec2.gamma_s:.8f}")
+#     print(f"f_p01d              = {mat.ec2.f_p01d:.8f} N/mm²")
+#     print(f"f_pd                = {mat.ec2.f_pd:.8f} N/mm²")
+#     print(f"Ep                   = {mat.ec2.Ep:.8f} N/mm²")
 
-    print(f"eps_uk              = {mat.ec2.eps_uk:.8f} [-]")
-    print(f"eps_uk              = {mat.ec2.eps_uk * 1000:.8f} mm/m")
+#     print(f"eps_uk              = {mat.ec2.eps_uk:.8f} [-]")
+#     print(f"eps_uk              = {mat.ec2.eps_uk * 1000:.8f} mm/m")
 
-    print(f"eps_el              = {mat.ec2.eps_el:.8f} [-]")
-    print(f"eps_el              = {mat.ec2.eps_el * 1000:.8f} mm/m")
+#     print(f"eps_el              = {mat.ec2.eps_el:.8f} [-]")
+#     print(f"eps_el              = {mat.ec2.eps_el * 1000:.8f} mm/m")
 
-    print(f"eps_ud              = {mat.ec2.eps_ud:.8f} [-]")
-    print(f"eps_ud              = {mat.ec2.eps_ud * 1000:.8f} mm/m")
+#     print(f"eps_ud              = {mat.ec2.eps_ud:.8f} [-]")
+#     print(f"eps_ud              = {mat.ec2.eps_ud * 1000:.8f} mm/m")
 
-    # if hasattr(mat.ec2, "eps_ud_ec2"):
-    #     print(
-    #         f"eps_ud_ec2          = "
-    #         f"{mat.ec2.eps_ud_ec2:.8f} [-]"
-    #     )
-    #     print(
-    #         f"eps_ud_ec2          = "
-    #         f"{mat.ec2.eps_ud_ec2 * 1000:.8f} mm/m"
-    #     )
+eps_test = np.array([
+    mat.eps_su - 1.0e-8,
+    mat.eps_su,
+    mat.eps_su + 1.0e-8,
+    mat.eps_su + 0.010,
+])
 
-    # if hasattr(mat.ec2, "eps_ud_explicit"):
-    #     print(
-    #         f"eps_ud_explicit     = "
-    #         f"{mat.ec2.eps_ud_explicit}"
-    #     )
+print(
+    mat.stress_array(
+        eps_test
+    )
+)
 
-    # if hasattr(mat.ec2, "sigma_ud_inclined"):
-    #     print(
-    #         f"sigma_ud_inclined   = "
-    #         f"{mat.ec2.sigma_ud_inclined:.8f} N/mm²"
-    #     )
-
-    # if hasattr(mat.ec2, "E_hard_characteristic"):
-    #     print(
-    #         f"E_hard_characteristic = "
-    #         f"{mat.ec2.E_hard_characteristic:.8f} N/mm²"
-    #     )
+print(
+    mat.tangent_array(
+        eps_test
+    )
+)

@@ -85,6 +85,8 @@ def _steel_stress_kernel(eps_flat, Es, fyd, ftd, eps_yd, eps_su,
             elif e <= eps_su:
                 out[i] = fyd + (ftd - fyd) * (e - eps_yd) / hard_range
             # else: 0 (rupture)
+            else: 
+                out[i] = ftd
         elif works_in_compression:
             ea = -e
             if ea <= eps_yd:
@@ -92,6 +94,8 @@ def _steel_stress_kernel(eps_flat, Es, fyd, ftd, eps_yd, eps_su,
             elif ea <= eps_su:
                 out[i] = -(fyd + (ftd - fyd) * (ea - eps_yd) / hard_range)
             # else: 0
+            else:
+                out[i] = -ftd
     return out
 
 
@@ -235,7 +239,7 @@ class Steel(Material):
             elif eps <= self.eps_su:
                 return self.fyd + (self.ftd - self.fyd) * (
                     (eps - self.eps_yd) / (self.eps_su - self.eps_yd))
-            return 0.0
+            return self.ftd
         if not self.works_in_compression:
             return 0.0
         ea = abs(eps)
@@ -244,7 +248,7 @@ class Steel(Material):
         elif ea <= self.eps_su:
             return -(self.fyd + (self.ftd - self.fyd) * (
                 (ea - self.eps_yd) / (self.eps_su - self.eps_yd)))
-        return 0.0
+        return -self.ftd
 
     def tangent(self, eps):
         r"""
@@ -296,6 +300,8 @@ class Steel(Material):
         m_tp = (eps > self.eps_yd) & (eps <= self.eps_su)
         sigma[m_tp] = self.fyd + (self.ftd - self.fyd) * (
             (eps[m_tp] - self.eps_yd) / (self.eps_su - self.eps_yd))
+        m_t_beyond = (eps > self.eps_su) & (eps >= 0)
+        sigma[m_t_beyond] = self.ftd
         if self.works_in_compression:
             ea = np.abs(eps)
             m_ce = (eps < 0) & (ea <= self.eps_yd)
@@ -304,6 +310,8 @@ class Steel(Material):
             sigma[m_cp] = -(self.fyd + (self.ftd - self.fyd) * (
                 (ea[m_cp] - self.eps_yd)
                 / (self.eps_su - self.eps_yd)))
+            m_c_beyond = (eps < -self.eps_su) & (eps < 0)
+            sigma[m_c_beyond] = -self.ftd
         return sigma
 
     def tangent_array(self, eps):

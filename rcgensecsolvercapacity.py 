@@ -1,0 +1,188 @@
+[35msrc/gensec/cli.py[m[36m:[m[32m44[m[36m:[m    plot_moment_[1;31mcurvature[m, plot_section, plot_section_state,
+[35msrc/gensec/cli.py[m[36m:[m[32m46[m[36m:[m    plot_moment_[1;31mcurvature[m_bundle, plot_polar_ductility,
+[35msrc/gensec/cli.py[m[36m:[m[32m48[m[36m:[m    plot_moment_[1;31mcurvature[m_surface,
+[35msrc/gensec/cli.py[m[36m:[m[32m57[m[36m:[m    export_moment_[1;31mcurvature[m_json, export_moment_[1;31mcurvature[m_csv,
+[35msrc/gensec/cli.py[m[36m:[m[32m104[m[36m:[m                            "moment-[1;31mcurvature[m and polar ductility "
+[35msrc/gensec/cli.py[m[36m:[m[32m256[m[36m:[m    do_moment_[1;31mcurvature[m = output_opts.get(
+[35msrc/gensec/cli.py[m[36m:[m[32m257[m[36m:[m        "generate_moment_[1;31mcurvature[m", False)
+[35msrc/gensec/cli.py[m[36m:[m[32m260[m[36m:[m    do_3d_moment_[1;31mcurvature[m = output_opts.get(
+[35msrc/gensec/cli.py[m[36m:[m[32m261[m[36m:[m        "generate_3d_moment_[1;31mcurvature[m", False)
+[35msrc/gensec/cli.py[m[36m:[m[32m503[m[36m:[m                    sol["[1;31mchi_x[m"],
+[35msrc/gensec/cli.py[m[36m:[m[32m504[m[36m:[m                    sol["[1;31mchi_y[m"],
+[35msrc/gensec/cli.py[m[36m:[m[32m571[m[36m:[m                    sol["[1;31mchi_x[m"],
+[35msrc/gensec/cli.py[m[36m:[m[32m572[m[36m:[m                    sol["[1;31mchi_y[m"],
+[35msrc/gensec/cli.py[m[36m:[m[32m598[m[36m:[m                #     + [1;31mchi_x[m * (y - y_ref)
+[35msrc/gensec/cli.py[m[36m:[m[32m599[m[36m:[m                #     - [1;31mchi_y[m * (x - x_ref)
+[35msrc/gensec/cli.py[m[36m:[m[32m606[m[36m:[m                [1;31mchi_x[m = float(sol["[1;31mchi_x[m"])
+[35msrc/gensec/cli.py[m[36m:[m[32m607[m[36m:[m                [1;31mchi_y[m = float(sol["[1;31mchi_y[m"])
+[35msrc/gensec/cli.py[m[36m:[m[32m628[m[36m:[m                    [1;31mchi_x[m,
+[35msrc/gensec/cli.py[m[36m:[m[32m629[m[36m:[m                    [1;31mchi_y[m,
+[35msrc/gensec/cli.py[m[36m:[m[32m655[m[36m:[m                        + [1;31mchi_x[m * ly
+[35msrc/gensec/cli.py[m[36m:[m[32m656[m[36m:[m                        - [1;31mchi_y[m * lx
+[35msrc/gensec/cli.py[m[36m:[m[32m978[m[36m:[m        do_mx_my or do_moment_[1;31mcurvature[m
+[35msrc/gensec/cli.py[m[36m:[m[32m979[m[36m:[m        or do_polar_ductility or do_3d_moment_[1;31mcurvature[m
+[35msrc/gensec/cli.py[m[36m:[m[32m1036[m[36m:[m    # --- Moment-[1;31mcurvature[m diagrams ---
+[35msrc/gensec/cli.py[m[36m:[m[32m1039[m[36m:[m    if do_moment_[1;31mcurvature[m:
+[35msrc/gensec/cli.py[m[36m:[m[32m1044[m[36m:[m            mc_x = nm_gen.generate_moment_[1;31mcurvature[m(
+[35msrc/gensec/cli.py[m[36m:[m[32m1049[m[36m:[m            export_moment_[1;31mcurvature[m_json(mc_x, p_json)
+[35msrc/gensec/cli.py[m[36m:[m[32m1050[m[36m:[m            export_moment_[1;31mcurvature[m_csv(
+[35msrc/gensec/cli.py[m[36m:[m[32m1053[m[36m:[m            fig = plot_moment_[1;31mcurvature[m(mc_x)
+[35msrc/gensec/cli.py[m[36m:[m[32m1062[m[36m:[m                mc_y = nm_gen.generate_moment_[1;31mcurvature[m(
+[35msrc/gensec/cli.py[m[36m:[m[32m1066[m[36m:[m                export_moment_[1;31mcurvature[m_json(mc_y, p_json)
+[35msrc/gensec/cli.py[m[36m:[m[32m1067[m[36m:[m                export_moment_[1;31mcurvature[m_csv(
+[35msrc/gensec/cli.py[m[36m:[m[32m1069[m[36m:[m                fig = plot_moment_[1;31mcurvature[m(mc_y)
+[35msrc/gensec/cli.py[m[36m:[m[32m1077[m[36m:[m            fig = plot_moment_[1;31mcurvature[m_bundle(mc_collection_x,
+[35msrc/gensec/cli.py[m[36m:[m[32m1086[m[36m:[m            fig = plot_moment_[1;31mcurvature[m_bundle(mc_collection_y,
+[35msrc/gensec/cli.py[m[36m:[m[32m1108[m[36m:[m    # --- 3D moment-[1;31mcurvature[m surfaces ---
+[35msrc/gensec/cli.py[m[36m:[m[32m1109[m[36m:[m    if do_3d_moment_[1;31mcurvature[m:
+[35msrc/gensec/cli.py[m[36m:[m[32m1112[m[36m:[m            fig = plot_moment_[1;31mcurvature[m_surface(
+[35msrc/gensec/cli.py[m[36m:[m[32m1121[m[36m:[m            fig = plot_moment_[1;31mcurvature[m_surface(
+[35msrc/gensec/cli.py[m[36m:[m[32m1222[m[36m:[m            [1;31mchi_x[m_diag = strain_state.get(
+[35msrc/gensec/cli.py[m[36m:[m[32m1223[m[36m:[m                "[1;31mchi_x[m",
+[35msrc/gensec/cli.py[m[36m:[m[32m1225[m[36m:[m                    "[1;31mchi_x[m",
+[35msrc/gensec/cli.py[m[36m:[m[32m1230[m[36m:[m            [1;31mchi_y[m_diag = strain_state.get(
+[35msrc/gensec/cli.py[m[36m:[m[32m1231[m[36m:[m                "[1;31mchi_y[m",
+[35msrc/gensec/cli.py[m[36m:[m[32m1233[m[36m:[m                    "[1;31mchi_y[m",
+[35msrc/gensec/cli.py[m[36m:[m[32m1240[m[36m:[m                or [1;31mchi_x[m_diag is None
+[35msrc/gensec/cli.py[m[36m:[m[32m1258[m[36m:[m                float([1;31mchi_x[m_diag),
+[35msrc/gensec/cli.py[m[36m:[m[32m1259[m[36m:[m                float([1;31mchi_y[m_diag),
+[35msrc/gensec/cli.py[m[36m:[m[32m1543[m[36m:[m              f"   χx = {ss.get('[1;31mchi_x[m',0)*1e6:.2f} 1/km"
+[35msrc/gensec/cli.py[m[36m:[m[32m1544[m[36m:[m              f"   χy = {ss.get('[1;31mchi_y[m',0)*1e6:.2f} 1/km")
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m24[m[36m:[mscanning ultimate strain configurations across all [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m27[m[36m:[mFor uniaxial analysis ([1;31mchi_y[m=0), produces the classic N-M diagram.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m34[m[36m:[mmoment-[1;31mcurvature[m scanner uses
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m47[m[36m:[m# that [1;31mcurvature[m: the solver returns the closest non-equilibrium state,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m75[m[36m:[m    ([1;31mchi_y[m = 0). For **biaxial** bending, generates a 3D point cloud
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m76[m[36m:[m    in (N, Mx, My) space by scanning [1;31mcurvature[m directions in the
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m77[m[36m:[m    :math:`(\[1;31mchi_x[m, \[1;31mchi_y[m)` plane.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m84[m[36m:[m            + \[1;31mchi_x[m\,(y - y_{\text{ref}})
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m85[m[36m:[m            - \[1;31mchi_y[m\,(x - x_{\text{ref}})
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m87[m[36m:[m    For the 3D scan, the [1;31mcurvature[m direction angle :math:`\theta` is:
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m91[m[36m:[m        \[1;31mchi_x[m = \chi \cos\theta, \quad \[1;31mchi_y[m = \chi \sin\theta
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m93[m[36m:[m    and the [1;31mcurvature[m magnitude :math:`\chi` is determined by the
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m236[m[36m:[m        For ``direction='x'`` (bending about x-axis, [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m237[m[36m:[m        :math:`\[1;31mchi_x[m`), the section depth is ``H`` and the reference
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m240[m[36m:[m        For ``direction='y'`` (bending about y-axis, [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m241[m[36m:[m        :math:`\[1;31mchi_y[m`), the section depth is ``B`` and the reference
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m246[m[36m:[m        1. **Crush-limited** (positive and negative [1;31mcurvature[m):
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m326[m[36m:[m        # Positive [1;31mcurvature[m: "top" (max coord) compressed
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m332[m[36m:[m        # Negative [1;31mcurvature[m: "bottom" (min coord) compressed
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m374[m[36m:[m        For ``direction='x'``: N-Mx diagram (:math:`\[1;31mchi_y[m = 0`).
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m375[m[36m:[m        For ``direction='y'``: N-My diagram (:math:`\[1;31mchi_x[m = 0`).
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m430[m[36m:[m        Pre-build the edge-strain template shared by all [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m526[m[36m:[m        produces [1;31mcurvature[ms of a single sign.  The opposite [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m611[m[36m:[m        Maximum [1;31mcurvature[m magnitude for a given [1;31mcurvature[m direction.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m613[m[36m:[m        The maximum [1;31mcurvature[m is determined by the strain range that
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m629[m[36m:[m            Direction cosines of the [1;31mcurvature[m direction angle.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m636[m[36m:[m            Maximum [1;31mcurvature[m magnitude [1/mm].
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m653[m[36m:[m        Compute projection parameters for each [1;31mcurvature[m direction.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m708[m[36m:[m        all_[1;31mchi_x[m = np.empty(total)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m709[m[36m:[m        all_[1;31mchi_y[m = np.empty(total)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m716[m[36m:[m            all_[1;31mchi_x[m[s:e] = chi * cos_t
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m717[m[36m:[m            all_[1;31mchi_y[m[s:e] = chi * sin_t
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m734[m[36m:[m                all_eps0[cs:ce], all_[1;31mchi_x[m[cs:ce], all_[1;31mchi_y[m[cs:ce])
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m755[m[36m:[m        Scans [1;31mcurvature[m directions :math:`\theta` in
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m756[m[36m:[m        :math:`[0, 2\pi)` and, for each direction, scans [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m766[m[36m:[m            Number of [1;31mcurvature[m direction angles. Default 36
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m813[m[36m:[m    def _vectorized_solve_N(self, N_fixed, [1;31mchi_x[m_arr, [1;31mchi_y[m_arr,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m818[m[36m:[m        [1;31mcurvature[m configurations simultaneously.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m834[m[36m:[m        [1;31mchi_x[m_arr, [1;31mchi_y[m_arr : numpy.ndarray
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m857[m[36m:[m        n = len([1;31mchi_x[m_arr)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m871[m[36m:[m        n = len([1;31mchi_x[m_arr)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m882[m[36m:[m                eps0[idx], [1;31mchi_x[m_arr[idx], [1;31mchi_y[m_arr[idx])
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m891[m[36m:[m                    eps0[sub] + delta, [1;31mchi_x[m_arr[sub], [1;31mchi_y[m_arr[sub])
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m914[m[36m:[m        1. For each [1;31mcurvature[m direction :math:`\theta \in [0, 2\pi)`,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m915[m[36m:[m           sweeps [1;31mcurvature[m magnitude :math:`\chi` and solves
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m919[m[36m:[m           across all angles and [1;31mcurvature[ms.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m968[m[36m:[m        [1;31mchi_x[m_parts = []
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m969[m[36m:[m        [1;31mchi_y[m_parts = []
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m980[m[36m:[m            [1;31mchi_x[m_parts.append(chis * cos_t)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m981[m[36m:[m            [1;31mchi_y[m_parts.append(chis * sin_t)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m983[m[36m:[m        if len([1;31mchi_x[m_parts) == 0:
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m987[m[36m:[m                "generate_mx_my: all [1;31mcurvature[m directions degenerate.",
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m995[m[36m:[m        all_[1;31mchi_x[m = np.concatenate([1;31mchi_x[m_parts)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m996[m[36m:[m        all_[1;31mchi_y[m = np.concatenate([1;31mchi_y[m_parts)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1001[m[36m:[m            N_fixed, all_[1;31mchi_x[m, all_[1;31mchi_y[m, tol=ftol)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1227[m[36m:[m            Number of [1;31mcurvature[m directions for the contour.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1241[m[36m:[m            ``ductility`` — :math:`\mu = \chi_u / \[1;31mchi_y[m` at
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1242[m[36m:[m            :math:`N_d` in the [1;31mcurvature[m direction closest to
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1329[m[36m:[m        # Ductility at the [1;31mcurvature[m direction closest to α.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1342[m[36m:[m        Compute ductility :math:`\mu = \chi_u / \[1;31mchi_y[m` at a given
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1343[m[36m:[m        [1;31mcurvature[m direction and axial force.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1345[m[36m:[m        Sweeps [1;31mcurvature[m from zero to the strain-limit-derived
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1357[m[36m:[m            Number of [1;31mcurvature[m steps.  Default 30.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1387[m[36m:[m        [1;31mchi_y[mield = None
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1398[m[36m:[m            if [1;31mchi_y[mield is None and len(er) > 0:
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1400[m[36m:[m                    [1;31mchi_y[mield = chis[j]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1407[m[36m:[m        if [1;31mchi_y[mield is not None and chi_ult is not None:
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1408[m[36m:[m            return abs(chi_ult / [1;31mchi_y[mield)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1412[m[36m:[m    #  Moment-[1;31mcurvature[m diagram (analytical Jacobian in Newton)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1415[m[36m:[m    def generate_moment_[1;31mcurvature[m(self, N_fixed, chi_max=None,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1418[m[36m:[m        Generate the moment-[1;31mcurvature[m diagram at fixed axial force.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1420[m[36m:[m        Scans [1;31mcurvature[m :math:`\chi` from 0 to the ultimate value
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1426[m[36m:[m        [1;31mcurvature[m step uses the **analytical tangent** from
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1435[m[36m:[m            Maximum [1;31mcurvature[m to scan [1/mm]. If ``None``, computed
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1438[m[36m:[m            Number of [1;31mcurvature[m steps. Default 100.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1440[m[36m:[m            ``'x'`` for Mx-[1;31mchi_x[m (default) or ``'y'`` for My-[1;31mchi_y[m.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1449[m[36m:[m            negative [1;31mcurvature[m branches, and ductility ratios
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1468[m[36m:[m        # The ultimate [1;31mcurvature[m for *any* axial force is bounded above
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1469[m[36m:[m        # by the [1;31mcurvature[m at which the strain difference between the
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1527[m[36m:[m        # Scan both positive and negative [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1593[m[36m:[m        Internal: scan [1;31mcurvature[m from chi_start to chi_end,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1613[m[36m:[m            Number of [1;31mcurvature[m steps.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1626[m[36m:[m                Scanned [1;31mcurvature[ms [1/mm], shape ``(n_points,)``.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1644[m[36m:[m                Moment at the ultimate [1;31mcurvature[m.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1679[m[36m:[m                [1;31mchi_x[m, [1;31mchi_y[m = chi, 0.0
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1681[m[36m:[m                [1;31mchi_x[m, [1;31mchi_y[m = 0.0, chi
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1683[m[36m:[m            # Solve for eps0 such that N(eps0, [1;31mchi_x[m, [1;31mchi_y[m) = N_fixed
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1685[m[36m:[m                sv, N_fixed, [1;31mchi_x[m, [1;31mchi_y[m, eps0_guess, emb)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1687[m[36m:[m            N, Mx, My = sv.integrate(eps0, [1;31mchi_x[m, [1;31mchi_y[m)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1689[m[36m:[m                # Target N unreachable at this [1;31mcurvature[m: drop the point.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1699[m[36m:[m            eb, er = sv.strain_field(eps0, [1;31mchi_x[m, [1;31mchi_y[m)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1745[m[36m:[m        Vectorized [1;31mcurvature[m scan at fixed axial force.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1751[m[36m:[m            :math:`\varepsilon_0` for *all* [1;31mcurvature[m steps in parallel.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1762[m[36m:[m        :math:`N(\varepsilon_0)` problems encountered in moment-[1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1766[m[36m:[m        [1;31mcurvature[m steps.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1775[m[36m:[m            Number of [1;31mcurvature[m steps.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1790[m[36m:[m                Largest scanned [1;31mcurvature[m magnitude [1/mm].
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1792[m[36m:[m                Number of [1;31mcurvature[m steps.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1822[m[36m:[m        # --- 1. Build [1;31mcurvature[m arrays for the chosen direction ---
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1824[m[36m:[m            [1;31mchi_x[m_arr = chis.copy()
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1825[m[36m:[m            [1;31mchi_y[m_arr = np.zeros(n_points, dtype=np.float64)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1827[m[36m:[m            [1;31mchi_x[m_arr = np.zeros(n_points, dtype=np.float64)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1828[m[36m:[m            [1;31mchi_y[m_arr = chis.copy()
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1837[m[36m:[m            N_fixed, [1;31mchi_x[m_arr, [1;31mchi_y[m_arr,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1844[m[36m:[m        # under small [1;31mcurvature[m).
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1853[m[36m:[m                    float([1;31mchi_x[m_arr[j]), float([1;31mchi_y[m_arr[j]),
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1857[m[36m:[m                    eps0_j, float([1;31mchi_x[m_arr[j]), float([1;31mchi_y[m_arr[j]))
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1864[m[36m:[m        # Event detection must only trust [1;31mcurvature[m steps whose axial
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1867[m[36m:[m        # a cracking / yield / ultimate event at the wrong [1;31mcurvature[m.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1883[m[36m:[m            + [1;31mchi_x[m_arr[:, None] * sv._ly_bulk[None, :]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1884[m[36m:[m            - [1;31mchi_y[m_arr[:, None] * sv._lx_bulk[None, :])
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1890[m[36m:[m                + [1;31mchi_x[m_arr[:, None] * sv._ly_rebar[None, :]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1891[m[36m:[m                - [1;31mchi_y[m_arr[:, None] * sv._lx_rebar[None, :])
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1903[m[36m:[m        # Events are detected as the *first* [1;31mcurvature[m step (smallest
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1905[m[36m:[m        # (a) have nonzero [1;31mcurvature[m and (b) converged in the
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1980[m[36m:[m    # METHOD 2 — generate_polar_[1;31mcurvature[m   (new public method)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1983[m[36m:[m    def generate_polar_[1;31mcurvature[m(self, N_fixed, n_angles=72, n_chi=100):
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1985[m[36m:[m        Compute the ultimate-[1;31mcurvature[m polar diagram at fixed axial force.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1987[m[36m:[m        For each [1;31mcurvature[m direction :math:`\theta \in [0, 2\pi)`, finds
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m1988[m[36m:[m        the ultimate [1;31mcurvature[m magnitude :math:`\chi_u(\theta)` — the
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2022[m[36m:[m            ``chi_u`` — ultimate [1;31mcurvature[m per angle [1/mm].
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2071[m[36m:[m        # 2. Build flat (n_total,) arrays of ([1;31mchi_x[m, [1;31mchi_y[m) configs
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2079[m[36m:[m        flat_[1;31mchi_x[m = np.empty(n_total, dtype=np.float64)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2080[m[36m:[m        flat_[1;31mchi_y[m = np.empty(n_total, dtype=np.float64)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2089[m[36m:[m            flat_[1;31mchi_x[m[s:e] = mags * cos_t[i]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2090[m[36m:[m            flat_[1;31mchi_y[m[s:e] = mags * sin_t[i]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2100[m[36m:[m            N_fixed, flat_[1;31mchi_x[m, flat_[1;31mchi_y[m,
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2111[m[36m:[m                    float(flat_[1;31mchi_x[m[j]), float(flat_[1;31mchi_y[m[j]),
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2130[m[36m:[m            cx = flat_[1;31mchi_x[m[s:e]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2131[m[36m:[m            cy = flat_[1;31mchi_y[m[s:e]
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2159[m[36m:[m                # No crossing found — use the last (largest) [1;31mcurvature[m
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2172[m[36m:[m    def _solve_eps0_for_N(sv, N_target, [1;31mchi_x[m, [1;31mchi_y[m, eps0_init, emb):
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2174[m[36m:[m        Solve for eps0 at fixed ([1;31mchi_x[m, [1;31mchi_y[m) such that N = N_target.
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2199[m[36m:[m        [1;31mchi_x[m, [1;31mchi_y[m : float
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2215[m[36m:[m            N, _, _, K = sv.integrate_with_tangent(eps0, [1;31mchi_x[m, [1;31mchi_y[m)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2236[m[36m:[m            Ni, _, _ = sv.integrate(e0, [1;31mchi_x[m, [1;31mchi_y[m)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2256[m[36m:[m        Na, _, _ = sv.integrate(a, [1;31mchi_x[m, [1;31mchi_y[m)
+[35msrc/gensec/solver/capacity.py[m[36m:[m[32m2259[m[36m:[m            Nm, _, _ = sv.integrate(mid, [1;31mchi_x[m, [1;31mchi_y[m)

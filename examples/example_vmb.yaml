@@ -32,7 +32,7 @@ materials:
     gamma_s: 1.15
     Es: 200000
     k_hardening: 1.0
-    eps_su: 0.01
+    eps_su: 0.025
     works_in_compression: true
 
   ps_strand:
@@ -73,7 +73,7 @@ section:
 demands:
   - name: Gravity
     N_kN: 0
-    Mx_kNm: -740
+    Mx_kNm: -500
     My_kNm: -5
   # - name: Seismic_x
   #   N_kN: -1200
@@ -86,14 +86,14 @@ demands:
 
 output:
   # v0.3.0 utilization flags.
-  eta_norm: false               # principal 3-D linear-distance metric
-  eta_norm_beta: false          # composite ratio (cross-software comparison)
-  eta_2D: false                 # Mx-My ray at fixed N (biaxial only)
+  eta_norm: true               # principal 3-D linear-distance metric
+  eta_norm_beta: true          # composite ratio (cross-software comparison)
+  eta_2D: true                 # Mx-My ray at fixed N (biaxial only)
   generate_mx_my: false
   generate_3d_surface: false
   n_levels_mode: auto          # linspace between N_Rd,min and N_Rd,max
-  n_levels_count: 5
+  n_levels_count: 1           # Bestimmt die Anzahl der Laststufen
   n_angles_mx_my: 144
-  generate_moment_curvature: false
+  generate_moment_curvature: true
   generate_polar_ductility: false
   generate_3d_moment_curvature: false

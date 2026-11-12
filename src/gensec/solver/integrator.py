@@ -2526,6 +2526,14 @@ class FiberSolver:
             sol = self._solve_uniaxial(
                 N_target, Mx_target, eps0_init, chi_x_init,
                 tol, max_iter)
+            print()
+            print("UNIAXIAL ACCEPTANCE CHECK")
+            print(f"converged = {sol['converged']}")
+            print(f"My        = {sol['My']:.12e} Nmm")
+            print(f"M_tol     = {M_tol:.12e} Nmm")
+            print(
+                f"|My| < M_tol = "
+                f"{abs(sol['My']) < M_tol}")
             if sol["converged"] and abs(sol["My"]) < M_tol:
                 return sol
 
@@ -2776,7 +2784,7 @@ class FiberSolver:
                                  tol, max_iter)
 
     def _nr_uniaxial(self, N_target, Mx_target, eps0, chi_x,
-                     tol, max_iter):
+                     tol, max_iter, debug_nr = True):
         r"""
         Core Newton-Raphson for uniaxial case.
 
@@ -2786,6 +2794,37 @@ class FiberSolver:
         for i in range(max_iter):
             N, Mx, My, K = self.integrate_with_tangent(eps0, chi_x, 0.0)
             r = np.array([N - N_target, Mx - Mx_target])
+            if debug_nr:
+
+                _, er_debug = self.strain_field(
+                    eps0,
+                    chi_x,
+                    0.0,
+                )
+
+                state_debug = (
+                    self._compute_quast_state(
+                        eps_rebar=er_debug,
+                        bulk_material=self.sec.bulk_material,
+                    )
+                )
+
+                cond_J = np.linalg.cond(
+                    K[:2, :2]
+                )
+
+                print(
+                    f"iter={i:3d} | "
+                    f"eps0={eps0: .8e} | "
+                    f"chi_x={chi_x: .8e} | "
+                    f"RN={r[0]: .6e} | "
+                    f"RMx={r[1]: .6e} | "
+                    f"My={My: .6e} | "
+                    f"eps_ref="
+                    f"{state_debug['eps_c_ref'] * 1000: .6f} | "
+                    f"VMB={state_debug['vmb']: .6e} | "
+                    f"condJ={cond_J: .6e}"
+                )
 
             if abs(r[0]) < tol and abs(r[1]) < tol * 1000:
                 return {
@@ -2797,10 +2836,11 @@ class FiberSolver:
             # Extract 2×2 sub-block [dN/de, dN/dc; dMx/de, dMx/dc]
             J = K[:2, :2]
             det = abs(J[0, 0] * J[1, 1] - J[0, 1] * J[1, 0])
-            if det < 1e-20:
-                eps0 += 1e-5
-                chi_x += 1e-7
-                continue
+            if (
+                not np.isfinite(det)
+                or det < 1.0e-20
+            ):
+                break
 
             try:
                 d = np.linalg.solve(J, -r)
@@ -2810,19 +2850,118 @@ class FiberSolver:
                 continue
 
             # Backtracking line search
-            alpha = 1.0
-            r_norm = np.linalg.norm(r)
-            for _ in range(15):
-                e_new = eps0 + alpha * d[0]
-                c_new = chi_x + alpha * d[1]
-                Nn, Mxn, _ = self.integrate(e_new, c_new, 0.0)
-                rn = np.array([Nn - N_target, Mxn - Mx_target])
-                if np.linalg.norm(rn) < r_norm:
-                    break
-                alpha *= 0.5
-            eps0 += alpha * d[0]
-            chi_x += alpha * d[1]
+            # alpha = 1.0
+            # r_norm = np.linalg.norm(r)
+            # for _ in range(15):
+            #     e_new = eps0 + alpha * d[0]
+            #     c_new = chi_x + alpha * d[1]
+            #     Nn, Mxn, _ = self.integrate(e_new, c_new, 0.0)
+            #     rn = np.array([Nn - N_target, Mxn - Mx_target])
+            #     if np.linalg.norm(rn) < r_norm:
+            #         break
+            #     alpha *= 0.5
+            # eps0 += alpha * d[0]
+            # chi_x += alpha * d[1]
+            # ==========================================================
+            # Scaled backtracking line search
+            # ==========================================================
 
+            res_scale = np.array([
+                max(float(tol), 1.0),
+                max(float(tol) * 1000.0, 1000.0),
+            ])
+
+            r_scaled = r / res_scale
+            phi_0 = float(np.linalg.norm(r_scaled))
+
+            alpha = 1.0
+            accepted = False
+
+            eps0_new = eps0
+            chi_x_new = chi_x
+
+            for _ in range(20):
+
+                e_trial = eps0 + alpha * d[0]
+                c_trial = chi_x + alpha * d[1]
+
+                N_trial, Mx_trial, _ = self.integrate(
+                    e_trial,
+                    c_trial,
+                    0.0,
+                )
+
+                r_trial = np.array([
+                    N_trial - N_target,
+                    Mx_trial - Mx_target,
+                ])
+
+                phi_trial = float(
+                    np.linalg.norm(
+                        r_trial / res_scale
+                    )
+                )
+
+                # Armijo-like sufficient decrease
+                if (
+                    np.isfinite(phi_trial)
+                    and phi_trial
+                    <= (1.0 - 1.0e-4 * alpha) * phi_0
+                ):
+                    eps0_new = e_trial
+                    chi_x_new = c_trial
+                    accepted = True
+                    break
+
+                alpha *= 0.5
+
+
+            if accepted:
+
+                eps0 = eps0_new
+                chi_x = chi_x_new
+
+            else:
+
+                # Do not apply an unsuccessful Newton step.
+                #
+                # Use a very small regularized step only if it actually
+                # reduces the scaled residual.
+                alpha = 1.0e-4
+
+                e_trial = eps0 + alpha * d[0]
+                c_trial = chi_x + alpha * d[1]
+
+                N_trial, Mx_trial, _ = self.integrate(
+                    e_trial,
+                    c_trial,
+                    0.0,
+                )
+
+                r_trial = np.array([
+                    N_trial - N_target,
+                    Mx_trial - Mx_target,
+                ])
+
+                phi_trial = float(
+                    np.linalg.norm(
+                        r_trial / res_scale
+                    )
+                )
+
+                if (
+                    np.isfinite(phi_trial)
+                    and phi_trial < phi_0
+                ):
+                    eps0 = e_trial
+                    chi_x = c_trial
+
+                else:
+                    # This start point has stalled.
+                    break
+
+        if debug_nr:
+            print(f" alpha={alpha: .6e}" f"accepted={accepted}")
         N, Mx, My = self.integrate(eps0, chi_x, 0.0)
         return {
             "eps0": eps0, "chi_x": chi_x, "chi_y": 0.0,
@@ -2940,10 +3079,11 @@ class FiberSolver:
             J = np.array([[K[0, 0], K[0, 2]],
                           [K[2, 0], K[2, 2]]])
             det = abs(J[0, 0] * J[1, 1] - J[0, 1] * J[1, 0])
-            if det < 1e-20:
-                eps0 += 1e-5
-                chi_y += 1e-7
-                continue
+            if (
+                not np.isfinite(det)
+                or det < 1.0e-20
+            ):
+                break
 
             try:
                 d = np.linalg.solve(J, -r)
@@ -2952,19 +3092,97 @@ class FiberSolver:
                 chi_y += 1e-7
                 continue
 
-            # Backtracking line search
+            # ==========================================================
+            # Scaled backtracking line search
+            # ==========================================================
+
+            res_scale = np.array([
+                max(float(tol), 1.0),
+                max(float(tol) * 1000.0, 1000.0),
+            ])
+
+            r_scaled = r / res_scale
+            phi_0 = float(np.linalg.norm(r_scaled))
+
             alpha = 1.0
-            r_norm = np.linalg.norm(r)
-            for _ in range(15):
-                e_new = eps0 + alpha * d[0]
-                c_new = chi_y + alpha * d[1]
-                Nn, _, Myn = self.integrate(e_new, 0.0, c_new)
-                rn = np.array([Nn - N_target, Myn - My_target])
-                if np.linalg.norm(rn) < r_norm:
+            accepted = False
+
+            eps0_new = eps0
+            chi_y_new = chi_y
+
+            for _ in range(20):
+
+                e_trial = eps0 + alpha * d[0]
+                c_trial = chi_y + alpha * d[1]
+
+                N_trial, _, My_trial = self.integrate(
+                    e_trial,
+                    0.0,
+                    c_trial,
+                )
+
+                r_trial = np.array([
+                    N_trial - N_target,
+                    My_trial - My_target,
+                ])
+
+                phi_trial = float(
+                    np.linalg.norm(
+                        r_trial / res_scale
+                    )
+                )
+
+                if (
+                    np.isfinite(phi_trial)
+                    and phi_trial
+                    <= (1.0 - 1.0e-4 * alpha) * phi_0
+                ):
+                    eps0_new = e_trial
+                    chi_y_new = c_trial
+                    accepted = True
                     break
+
                 alpha *= 0.5
-            eps0 += alpha * d[0]
-            chi_y += alpha * d[1]
+
+
+            if accepted:
+
+                eps0 = eps0_new
+                chi_y = chi_y_new
+
+            else:
+
+                alpha = 1.0e-4
+
+                e_trial = eps0 + alpha * d[0]
+                c_trial = chi_y + alpha * d[1]
+
+                N_trial, _, My_trial = self.integrate(
+                    e_trial,
+                    0.0,
+                    c_trial,
+                )
+
+                r_trial = np.array([
+                    N_trial - N_target,
+                    My_trial - My_target,
+                ])
+
+                phi_trial = float(
+                    np.linalg.norm(
+                        r_trial / res_scale
+                    )
+                )
+
+                if (
+                    np.isfinite(phi_trial)
+                    and phi_trial < phi_0
+                ):
+                    eps0 = e_trial
+                    chi_y = c_trial
+
+                else:
+                    break
 
         N, Mx, My = self.integrate(eps0, 0.0, chi_y)
         return {
@@ -3014,54 +3232,571 @@ class FiberSolver:
 
         return sol
 
-    def _nr_biaxial(self, N_target, Mx_target, My_target,
-                    eps0, chi_x, chi_y, tol, max_iter):
+    def _nr_biaxial(
+        self,
+        N_target,
+        Mx_target,
+        My_target,
+        eps0,
+        chi_x,
+        chi_y,
+        tol,
+        max_iter,
+    ):
         r"""
-        Core Newton-Raphson for biaxial case.
+        Core nonlinear equilibrium solver for biaxial bending.
 
-        Uses the **analytical** 3×3 tangent stiffness matrix.
+        The solver first attempts a Newton-Raphson step with a scaled
+        backtracking line search. If the Newton direction cannot reduce
+        the dimensionless residual norm, a Levenberg-Marquardt step is
+        used as a fallback.
+
+        Unknowns
+        --------
+        eps0
+            Reference strain.
+
+        chi_x
+            Curvature about the x-axis [1/mm].
+
+        chi_y
+            Curvature about the y-axis [1/mm].
+
+        Equilibrium conditions
+        ----------------------
+        N  = N_target
+        Mx = Mx_target
+        My = My_target
         """
-        x = np.array([eps0, chi_x, chi_y])
-        target = np.array([N_target, Mx_target, My_target])
-        tol_vec = np.array([tol, tol * 1000, tol * 1000])
+
+        # Set True temporarily for detailed iteration output.
+        debug_nr = True
+
+        # Current strain state
+        x = np.array(
+            [
+                eps0,
+                chi_x,
+                chi_y,
+            ],
+            dtype=float,
+        )
+
+        # Target section forces
+        target = np.array(
+            [
+                N_target,
+                Mx_target,
+                My_target,
+            ],
+            dtype=float,
+        )
+
+        # Actual convergence limits:
+        #
+        # N   [N]
+        # Mx  [N mm]
+        # My  [N mm]
+        tol_vec = np.array(
+            [
+                tol,
+                tol * 1000.0,
+                tol * 1000.0,
+            ],
+            dtype=float,
+        )
+
+        # Residual scaling for line search and LM fallback.
+        #
+        # This scaling is used only to compare trial points.
+        # It does not change the actual convergence criteria.
+        res_scale = np.array(
+            [
+                max(abs(float(N_target)), 1.0e3),
+                max(abs(float(Mx_target)), 1.0e6),
+                max(abs(float(My_target)), 1.0e6),
+            ],
+            dtype=float,
+        )
+
+        # Scaling of solution parameters:
+        #
+        # eps0  typically about 1e-3
+        # chi   typically about 1e-5 to 1e-4 1/mm
+        parameter_scale = np.array(
+            [
+                1.0e-3,
+                1.0e-5,
+                1.0e-5,
+            ],
+            dtype=float,
+        )
+
+        parameter_damping = np.diag(
+            1.0
+            / (
+                parameter_scale
+                * parameter_scale
+            )
+        )
+
+        # Keep the last evaluated section forces for failure return.
+        f = np.zeros(
+            3,
+            dtype=float,
+        )
 
         for i in range(max_iter):
-            N, Mx, My, K = self.integrate_with_tangent(
-                x[0], x[1], x[2])
-            f = np.array([N, Mx, My])
-            r = f - target
 
-            if np.all(np.abs(r) < tol_vec):
+            # ==================================================
+            # Section response and analytical tangent
+            # ==================================================
+
+            N, Mx, My, K = (
+                self.integrate_with_tangent(
+                    float(x[0]),
+                    float(x[1]),
+                    float(x[2]),
+                )
+            )
+
+            f = np.array(
+                [
+                    N,
+                    Mx,
+                    My,
+                ],
+                dtype=float,
+            )
+
+            r = (
+                f
+                - target
+            )
+
+            # ==================================================
+            # Convergence check
+            # ==================================================
+
+            if np.all(
+                np.abs(r)
+                < tol_vec
+            ):
+
                 return {
-                    "eps0": x[0], "chi_x": x[1], "chi_y": x[2],
-                    "N": f[0], "Mx": f[1], "My": f[2],
-                    "converged": True, "iterations": i + 1,
+                    "eps0": float(x[0]),
+                    "chi_x": float(x[1]),
+                    "chi_y": float(x[2]),
+                    "N": float(f[0]),
+                    "Mx": float(f[1]),
+                    "My": float(f[2]),
+                    "converged": True,
+                    "iterations": i + 1,
                 }
 
+            # ==================================================
+            # VMB diagnostics
+            # ==================================================
+
+            if debug_nr:
+
+                _, er_debug = (
+                    self.strain_field(
+                        float(x[0]),
+                        float(x[1]),
+                        float(x[2]),
+                    )
+                )
+
+                state_debug = (
+                    self._compute_quast_state(
+                        eps_rebar=er_debug,
+                        bulk_material=(
+                            self.sec.bulk_material
+                        ),
+                    )
+                )
+
+                try:
+
+                    cond_K = float(
+                        np.linalg.cond(K)
+                    )
+
+                except np.linalg.LinAlgError:
+
+                    cond_K = np.inf
+
+                print(
+                    f"iter={i:3d} | "
+                    f"eps0={x[0]: .8e} | "
+                    f"chi_x={x[1]: .8e} | "
+                    f"chi_y={x[2]: .8e} | "
+                    f"RN={r[0]: .6e} | "
+                    f"RMx={r[1]: .6e} | "
+                    f"RMy={r[2]: .6e} | "
+                    f"eps_ref="
+                    f"{state_debug['eps_c_ref'] * 1000.0: .6f} | "
+                    f"VMB={state_debug['vmb']: .6e} | "
+                    f"condK={cond_K: .6e}"
+                )
+
+            # ==================================================
+            # Validate tangent matrix
+            # ==================================================
+
+            if not np.all(
+                np.isfinite(K)
+            ):
+
+                if debug_nr:
+
+                    print(
+                        "          Tangent matrix contains "
+                        "non-finite values."
+                    )
+
+                break
+
+            # ==================================================
+            # Dimensionless residual and merit function
+            # ==================================================
+
+            r_scaled = (
+                r
+                / res_scale
+            )
+
+            phi_0 = float(
+                np.linalg.norm(
+                    r_scaled
+                )
+            )
+
+            K_scaled = (
+                K
+                / res_scale[:, None]
+            )
+
+            # ==================================================
+            # Newton step
+            # ==================================================
+
             try:
-                d = np.linalg.solve(K, -r)
+
+                d_newton = np.linalg.solve(
+                    K,
+                    -r,
+                )
+
             except np.linalg.LinAlgError:
-                x += np.array([1e-5, 1e-7, 1e-7])
+
+                d_newton = None
+
+                if debug_nr:
+
+                    print(
+                        "          Newton matrix could "
+                        "not be solved."
+                    )
+
+            if (
+                d_newton is not None
+                and not np.all(
+                    np.isfinite(d_newton)
+                )
+            ):
+
+                d_newton = None
+
+                if debug_nr:
+
+                    print(
+                        "          Newton step contains "
+                        "non-finite values."
+                    )
+
+            # ==================================================
+            # Check if Newton is a descent direction
+            # ==================================================
+
+            if d_newton is not None:
+
+                gradient = (
+                    K_scaled.T
+                    @ r_scaled
+                )
+
+                descent_measure = float(
+                    gradient
+                    @ d_newton
+                )
+
+                if debug_nr:
+
+                    print(
+                        f"          grad*d="
+                        f"{descent_measure: .6e}"
+                    )
+
+            # ==================================================
+            # Newton backtracking line search
+            # ==================================================
+
+            newton_accepted = False
+            x_newton = x.copy()
+            alpha = 1.0
+
+            if d_newton is not None:
+
+                for _ in range(20):
+
+                    x_trial = (
+                        x
+                        + alpha * d_newton
+                    )
+
+                    N_trial, Mx_trial, My_trial = (
+                        self.integrate(
+                            float(x_trial[0]),
+                            float(x_trial[1]),
+                            float(x_trial[2]),
+                        )
+                    )
+
+                    r_trial = np.array(
+                        [
+                            N_trial - N_target,
+                            Mx_trial - Mx_target,
+                            My_trial - My_target,
+                        ],
+                        dtype=float,
+                    )
+
+                    phi_trial = float(
+                        np.linalg.norm(
+                            r_trial
+                            / res_scale
+                        )
+                    )
+
+                    # Armijo-type sufficient decrease
+                    if (
+                        np.isfinite(phi_trial)
+                        and phi_trial
+                        <= (
+                            1.0
+                            - 1.0e-4 * alpha
+                        )
+                        * phi_0
+                    ):
+
+                        x_newton = x_trial
+                        newton_accepted = True
+
+                        break
+
+                    alpha *= 0.5
+
+                    if debug_nr:
+
+                        print(
+                            f"          alpha="
+                            f"{alpha: .6e} | "
+                            f"accepted=False"
+                        )
+
+            if newton_accepted:
+
+                x = x_newton
+
+                if debug_nr:
+
+                    print(
+                        f"          Newton alpha="
+                        f"{alpha: .6e} | "
+                        f"accepted=True"
+                    )
+
                 continue
 
-            # Backtracking line search
-            alpha = 1.0
-            r_norm = np.linalg.norm(r)
-            for _ in range(15):
-                x_new = x + alpha * d
-                f_new = np.array(self.integrate(
-                    x_new[0], x_new[1], x_new[2]))
-                r_new = f_new - target
-                if np.linalg.norm(r_new) < r_norm:
-                    break
-                alpha *= 0.5
-            x = x + alpha * d
+            # ==================================================
+            # Levenberg-Marquardt fallback
+            # ==================================================
+            #
+            # Newton did not produce a residual-decreasing step.
+            # Use a regularized least-squares direction:
+            #
+            # (J.T J + lambda D) dx = -J.T r
+            # ==================================================
 
-        f = np.array(self.integrate(x[0], x[1], x[2]))
+            JTJ = (
+                K_scaled.T
+                @ K_scaled
+            )
+
+            lm_gradient = (
+                K_scaled.T
+                @ r_scaled
+            )
+
+            diagonal = np.diag(
+                JTJ
+            )
+
+            finite_diagonal = diagonal[
+                np.isfinite(diagonal)
+            ]
+
+            if finite_diagonal.size:
+
+                diag_scale = max(
+                    float(
+                        np.max(
+                            np.abs(
+                                finite_diagonal
+                            )
+                        )
+                    ),
+                    1.0,
+                )
+
+            else:
+
+                diag_scale = 1.0
+
+            lam = (
+                1.0e-8
+                * diag_scale
+            )
+
+            lm_accepted = False
+            x_lm = x.copy()
+
+            for _ in range(15):
+
+                A_lm = (
+                    JTJ
+                    + lam
+                    * parameter_damping
+                )
+
+                try:
+
+                    d_lm = np.linalg.solve(
+                        A_lm,
+                        -lm_gradient,
+                    )
+
+                except np.linalg.LinAlgError:
+
+                    lam *= 10.0
+                    continue
+
+                if not np.all(
+                    np.isfinite(d_lm)
+                ):
+
+                    lam *= 10.0
+                    continue
+
+                x_trial = (
+                    x
+                    + d_lm
+                )
+
+                N_trial, Mx_trial, My_trial = (
+                    self.integrate(
+                        float(x_trial[0]),
+                        float(x_trial[1]),
+                        float(x_trial[2]),
+                    )
+                )
+
+                r_trial = np.array(
+                    [
+                        N_trial - N_target,
+                        Mx_trial - Mx_target,
+                        My_trial - My_target,
+                    ],
+                    dtype=float,
+                )
+
+                phi_trial = float(
+                    np.linalg.norm(
+                        r_trial
+                        / res_scale
+                    )
+                )
+
+                if debug_nr:
+
+                    print(
+                        f"          LM lambda="
+                        f"{lam: .6e} | "
+                        f"phi0={phi_0: .6e} | "
+                        f"phi_trial={phi_trial: .6e}"
+                    )
+
+                if (
+                    np.isfinite(phi_trial)
+                    and phi_trial < phi_0
+                ):
+
+                    x_lm = x_trial
+                    lm_accepted = True
+
+                    break
+
+                # Increase damping and move towards
+                # a scaled gradient-descent step.
+                lam *= 10.0
+
+            if lm_accepted:
+
+                x = x_lm
+
+                if debug_nr:
+
+                    print(
+                        f"          LM accepted=True | "
+                        f"lambda={lam: .6e}"
+                    )
+
+                continue
+
+            # ==================================================
+            # Neither Newton nor LM found an improving step
+            # ==================================================
+
+            if debug_nr:
+
+                print(
+                    "          Newton and LM failed "
+                    "to reduce the scaled residual."
+                )
+
+            break
+
+        # ======================================================
+        # Return last evaluated state as not converged
+        # ======================================================
+
+        N, Mx, My = self.integrate(
+            float(x[0]),
+            float(x[1]),
+            float(x[2]),
+        )
+
         return {
-            "eps0": x[0], "chi_x": x[1], "chi_y": x[2],
-            "N": f[0], "Mx": f[1], "My": f[2],
-            "converged": False, "iterations": max_iter,
+            "eps0": float(x[0]),
+            "chi_x": float(x[1]),
+            "chi_y": float(x[2]),
+            "N": float(N),
+            "Mx": float(Mx),
+            "My": float(My),
+            "converged": False,
+            "iterations": max_iter,
         }
 
     # ------------------------------------------------------------------
@@ -3431,15 +4166,6 @@ class FiberSolver:
 
                 et_tot[idx] = e_tot_g
 
-                # ======================================================
-                # Tendon stress
-                # ======================================================
-                e_tot_eval = np.minimum(
-                    e_tot_g, eps_ud_limit[None, :]
-                )
-                sp_group = mat.stress_array(
-                    e_tot_eval
-                )
 
                 # Individual permissible tensile strain
                 eps_ud_limit = self._tendon_eps_ud_limits(
@@ -3452,16 +4178,15 @@ class FiberSolver:
                     ),
                 )
 
+                e_tot_eval = np.minimum(
+                    e_tot_g, eps_ud_limit
+                )
+
+                sp_group = mat.stress_array(e_tot_eval)
                 failed_tension = (
                     e_tot_g
                     > eps_ud_limit
-                )
-
-                sp_group = sp_group.copy()
-
-                sp_group[
-                    failed_tension
-                ] = 0.0
+                )   
 
                 sp[idx] = sp_group
 
@@ -3539,6 +4264,298 @@ class FiberSolver:
 
         return result
 
+    def strain_limit_diagnostics(self,eps0,chi_x,chi_y=0.0,atol=1.0e-12,):
+        """
+        Return detailed information about exceeded material strain limits.
+
+        Parameters
+        ----------
+        eps0, chi_x, chi_y : float
+            Section strain-plane parameters.
+
+        atol : float
+            Numerical tolerance for strain-limit comparisons.
+
+        Returns
+        -------
+        dict
+            {
+                "ok": bool,
+                "violations": list[dict],
+            }
+        """
+
+        violations = []
+
+        eb, er = self.strain_field(
+            eps0,
+            chi_x,
+            chi_y,
+        )
+
+        # ======================================================
+        # Bulk fibers
+        # ======================================================
+
+        for mat, idx in self._bulk_groups:
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            e_group = (
+                eb[idx]
+                + self._bulk_offset(idx)
+            )
+
+            lower = (
+                e_group
+                < float(mat.eps_min) - atol
+            )
+
+            upper = (
+                e_group
+                > float(mat.eps_max) + atol
+            )
+
+            for local_idx in np.where(
+                lower | upper
+            )[0]:
+
+                global_idx = int(
+                    idx[local_idx]
+                )
+
+                eps_value = float(
+                    e_group[local_idx]
+                )
+
+                violations.append({
+                    "type": "bulk",
+                    "index": global_idx,
+                    "material": getattr(
+                        mat,
+                        "name",
+                        type(mat).__name__,
+                    ),
+                    "x": float(
+                        self.sec.x_fibers[
+                            global_idx
+                        ]
+                    ),
+                    "y": float(
+                        self.sec.y_fibers[
+                            global_idx
+                        ]
+                    ),
+                    "eps": eps_value,
+                    "eps_mm_m": (
+                        eps_value * 1000.0
+                    ),
+                    "eps_min": float(
+                        mat.eps_min
+                    ),
+                    "eps_max": float(
+                        mat.eps_max
+                    ),
+                    "limit": (
+                        "minimum"
+                        if lower[local_idx]
+                        else "maximum"
+                    ),
+                })
+
+        # ======================================================
+        # Normal reinforcement
+        # ======================================================
+
+        for (
+            mat,
+            _bulk_mat,
+            idx,
+        ) in self._rebar_groups:
+
+            idx = np.asarray(
+                idx,
+                dtype=int,
+            )
+
+            e_group = er[idx]
+
+            lower = (
+                e_group
+                < float(mat.eps_min) - atol
+            )
+
+            upper = (
+                e_group
+                > float(mat.eps_max) + atol
+            )
+
+            for local_idx in np.where(
+                lower | upper
+            )[0]:
+
+                global_idx = int(
+                    idx[local_idx]
+                )
+
+                eps_value = float(
+                    e_group[local_idx]
+                )
+
+                violations.append({
+                    "type": "rebar",
+                    "index": global_idx,
+                    "material": getattr(
+                        mat,
+                        "name",
+                        type(mat).__name__,
+                    ),
+                    "x": float(
+                        self.sec.x_rebars[
+                            global_idx
+                        ]
+                    ),
+                    "y": float(
+                        self.sec.y_rebars[
+                            global_idx
+                        ]
+                    ),
+                    "eps": eps_value,
+                    "eps_mm_m": (
+                        eps_value * 1000.0
+                    ),
+                    "eps_min": float(
+                        mat.eps_min
+                    ),
+                    "eps_max": float(
+                        mat.eps_max
+                    ),
+                    "limit": (
+                        "minimum"
+                        if lower[local_idx]
+                        else "maximum"
+                    ),
+                })
+
+        # ======================================================
+        # Tendons
+        # ======================================================
+
+        if self._has_tendons:
+
+            et_sec = (
+                self._tendon_section_strain(
+                    eps0,
+                    chi_x,
+                    chi_y,
+                )
+            )
+
+            for (
+                mat,
+                _bulk_mat,
+                idx,
+                eps_init,
+            ) in self._tendon_groups:
+
+                idx = np.asarray(
+                    idx,
+                    dtype=int,
+                )
+
+                eps_init = np.asarray(
+                    eps_init,
+                    dtype=float,
+                )
+
+                e_sec = et_sec[idx]
+
+                e_tot = (
+                    e_sec
+                    + eps_init
+                )
+
+                eps_ud_limit = (
+                    self._tendon_eps_ud_limits(
+                        material=mat,
+                        eps_init=eps_init,
+                        use_german_eps_ud=getattr(
+                            mat,
+                            "use_german_eps_ud",
+                            False,
+                        ),
+                    )
+                )
+
+                lower = (
+                    e_tot
+                    < float(mat.eps_min) - atol
+                )
+
+                upper = (
+                    e_tot
+                    > eps_ud_limit + atol
+                )
+
+                for local_idx in np.where(lower | upper)[0]:
+                    global_idx = int(
+                        idx[local_idx]
+                    )
+
+                    violations.append({
+                        "type": "tendon",
+                        "index": global_idx,
+                        "material": getattr(
+                            mat,
+                            "name",
+                            type(mat).__name__,
+                        ),
+                        "x": float(
+                            self.sec.x_tendons[
+                                global_idx
+                            ]
+                        ),
+                        "y": float(
+                            self.sec.y_tendons[
+                                global_idx
+                            ]
+                        ),
+                        "eps_sec": float(
+                            e_sec[local_idx]
+                        ),
+                        "eps_init": float(
+                            eps_init[local_idx]
+                        ),
+                        "eps_tot": float(
+                            e_tot[local_idx]
+                        ),
+                        "eps_tot_mm_m": float(
+                            e_tot[local_idx]
+                            * 1000.0
+                        ),
+                        "eps_min": float(
+                            mat.eps_min
+                        ),
+                        "eps_max": float(
+                            eps_ud_limit[
+                                local_idx
+                            ]
+                        ),
+                        "limit": (
+                            "minimum"
+                            if lower[local_idx]
+                            else "maximum"
+                        ),
+                    })
+
+        return {
+            "ok": len(violations) == 0,
+            "violations": violations,
+        }
+
     def strains_within_limits(self, eps0, chi_x, chi_y=0.0):
         r"""
         Check whether all fiber strains are within material limits.
@@ -3569,44 +4586,16 @@ class FiberSolver:
             :math:`\varepsilon_{\min} \le \varepsilon_i
             \le \varepsilon_{\max}`.
         """
-        eb, er = self.strain_field(eps0, chi_x, chi_y)
+        """
+        Return True if all material strain limits are satisfied.
+        """
 
-        for mat, idx in self._bulk_groups:
-            e_group = eb[idx] + self._bulk_offset(idx)
-            if np.any(e_group < mat.eps_min) or \
-               np.any(e_group > mat.eps_max):
-                return False
+        diagnostics = (
+            self.strain_limit_diagnostics(
+                eps0,
+                chi_x,
+                chi_y,
+            )
+        )
 
-        for mat, _bulk_mat, idx in self._rebar_groups:
-            e_group = er[idx]
-            if np.any(e_group < mat.eps_min) or \
-               np.any(e_group > mat.eps_max):
-                return False
-
-        # Tendons: limits apply to the TOTAL strain (section strain +
-        # locked-in prestrain), since that is the argument of the
-        # tendon's constitutive law.
-        if self._has_tendons:
-            et_sec = self._tendon_section_strain(eps0, chi_x, chi_y)
-            for mat, _bulk_mat, idx, eps_init in self._tendon_groups:
-                e_tot = et_sec[idx] + eps_init
-                eps_ud_limit = self._tendon_eps_ud_limits(
-                    material=mat,
-                    eps_init=eps_init,
-                    use_german_eps_ud=getattr(
-                        mat,
-                        "use_german_eps_ud",
-                        False,
-                    ),
-                )
-
-                if (
-                    np.any(e_tot < mat.eps_min)
-                    or np.any(e_tot > eps_ud_limit)
-                ):
-                    return False
-                if np.any(e_tot < mat.eps_min) or \
-                   np.any(e_tot > eps_ud_limit):
-                    return False
-
-        return True
+        return diagnostics["ok"]

@@ -494,12 +494,83 @@ def _run(args):
             sol = solver.solve_equilibrium(N_d, Mx_d, My_d)
 
             if sol["converged"]:
+                # ==========================================================
+                # Strain-limit diagnostics for converged solution
+                # ==========================================================
+
+                diag = solver.strain_limit_diagnostics(
+                    sol["eps0"],
+                    sol["chi_x"],
+                    sol["chi_y"],
+                )
+                equilibrium_status = (
+                    "YES"
+                    if sol["converged"]
+                    else "NO"
+                )
+                strain_status = (
+                    "OK"
+                    if diag["ok"]
+                    else "NOT OK"
+                )
+
+
+                print()
+                print("  STRAIN LIMIT CHECK")
+                print("  ------------------")
+                print(
+                    f"  strain limits = {strain_status}"
+                )
+
+                if not diag["ok"]:
+
+                    for violation in diag["violations"]:
+
+                        kind = violation["type"]
+
+                        if kind == "tendon":
+
+                            print(
+                                f"  TENDON LIMIT EXCEEDED:"
+                                f" index={violation['index']}"
+                            )
+
+                            print(
+                                f"      eps_tot   = "
+                                f"{violation['eps_tot'] * 1000.0:.6f} mm/m"
+                            )
+
+                            print(
+                                f"      eps_limit = "
+                                f"{violation['eps_max'] * 1000.0:.6f} mm/m"
+                            )
+
+                        else:
+
+                            print(
+                                f"  {kind.upper()} LIMIT EXCEEDED:"
+                                f" index={violation['index']}"
+                            )
+
+                            print(
+                                f"      eps       = "
+                                f"{violation['eps'] * 1000.0:.6f} mm/m"
+                            )
+
+                            print(
+                                f"      eps_min   = "
+                                f"{violation['eps_min'] * 1000.0:.6f} mm/m"
+                            )
+
+                            print(
+                                f"      eps_max   = "
+                                f"{violation['eps_max'] * 1000.0:.6f} mm/m"
+                            )
                 fr = solver.get_fiber_results(
                     sol["eps0"],
                     sol["chi_x"],
                     sol["chi_y"],
                 )
-
                 print(f"\n  --- {label} ---")
                 print_fiber_results(fr, section)
 
@@ -1069,6 +1140,268 @@ def _run(args):
         size = os.path.getsize(os.path.join(outdir, fn))
         print(f"    {fn:45s}  {size:>8,} bytes")
     print("=" * 80)
+    # ==========================================================
+    # Final strain-limit / admissibility diagnostics
+    # ==========================================================
+
+    print()
+    print("=" * 78)
+    print("FINAL STRAIN-LIMIT DIAGNOSTICS")
+    print("=" * 78)
+
+    if not demand_results:
+
+        print("No demand results available.")
+
+    else:
+
+        n_total = 0
+        n_converged = 0
+        n_strains_ok = 0
+        n_strains_failed = 0
+
+        for item in demand_results:
+
+            n_total += 1
+
+            label = item.get(
+                "label",
+                item.get(
+                    "name",
+                    f"demand_{n_total}",
+                ),
+            )
+
+            converged = bool(
+                item.get(
+                    "converged",
+                    False,
+                )
+            )
+
+            if not converged:
+
+                print()
+                print(
+                    f"[{label}] "
+                    "EQUILIBRIUM NOT CONVERGED"
+                )
+
+                reason = item.get(
+                    "failure_reason",
+                    None,
+                )
+
+                if reason is not None:
+
+                    print(
+                        f"  reason = {reason}"
+                    )
+
+                continue
+
+            n_converged += 1
+
+            # --------------------------------------------------
+            # Get converged strain state
+            # --------------------------------------------------
+
+            strain_state = item.get(
+                "strain_state",
+                {},
+            )
+
+            eps0_diag = strain_state.get(
+                "eps0",
+                item.get(
+                    "eps0",
+                    None,
+                ),
+            )
+
+            chi_x_diag = strain_state.get(
+                "chi_x",
+                item.get(
+                    "chi_x",
+                    None,
+                ),
+            )
+
+            chi_y_diag = strain_state.get(
+                "chi_y",
+                item.get(
+                    "chi_y",
+                    0.0,
+                ),
+            )
+
+            if (
+                eps0_diag is None
+                or chi_x_diag is None
+            ):
+
+                print()
+                print(
+                    f"[{label}] "
+                    "CONVERGED, BUT NO STRAIN STATE "
+                    "AVAILABLE FOR DIAGNOSTICS"
+                )
+
+                continue
+
+            # --------------------------------------------------
+            # Detailed material-limit diagnostics
+            # --------------------------------------------------
+
+            diag = solver.strain_limit_diagnostics(
+                float(eps0_diag),
+                float(chi_x_diag),
+                float(chi_y_diag),
+            )
+
+            if diag["ok"]:
+
+                n_strains_ok += 1
+
+                print()
+                print(
+                    f"[{label}] "
+                    "CONVERGED - ALL STRAIN LIMITS OK"
+                )
+
+                continue
+
+            n_strains_failed += 1
+
+            print()
+            print(
+                f"[{label}] "
+                "CONVERGED - STRAIN LIMIT EXCEEDED"
+            )
+
+            for violation in diag["violations"]:
+
+                kind = violation["type"]
+
+                # ==============================================
+                # Prestressing tendons
+                # ==============================================
+
+                if kind == "tendon":
+
+                    eps_tot = violation[
+                        "eps_tot"
+                    ]
+
+                    eps_limit = violation[
+                        "eps_max"
+                    ]
+
+                    exceedance = (
+                        eps_tot
+                        - eps_limit
+                    )
+
+                    print(
+                        f"  tendon {violation['index']} | "
+                        f"material={violation['material']} | "
+                        f"x={violation['x']:.3f} mm | "
+                        f"y={violation['y']:.3f} mm"
+                    )
+
+                    print(
+                        f"      eps_sec  = "
+                        f"{violation['eps_sec'] * 1000.0:.6f} mm/m"
+                    )
+
+                    print(
+                        f"      eps_init = "
+                        f"{violation['eps_init'] * 1000.0:.6f} mm/m"
+                    )
+
+                    print(
+                        f"      eps_tot  = "
+                        f"{eps_tot * 1000.0:.6f} mm/m"
+                    )
+
+                    print(
+                        f"      eps_limit= "
+                        f"{eps_limit * 1000.0:.6f} mm/m"
+                    )
+
+                    print(
+                        f"      exceeded by "
+                        f"{exceedance * 1000.0:.6f} mm/m"
+                    )
+
+                # ==============================================
+                # Concrete / reinforcement fibers
+                # ==============================================
+
+                else:
+
+                    eps_value = violation[
+                        "eps"
+                    ]
+
+                    eps_min = violation[
+                        "eps_min"
+                    ]
+
+                    eps_max = violation[
+                        "eps_max"
+                    ]
+
+                    print(
+                        f"  {kind} {violation['index']} | "
+                        f"material={violation['material']} | "
+                        f"x={violation['x']:.3f} mm | "
+                        f"y={violation['y']:.3f} mm"
+                    )
+
+                    print(
+                        f"      eps      = "
+                        f"{eps_value * 1000.0:.6f} mm/m"
+                    )
+
+                    print(
+                        f"      limits   = "
+                        f"[{eps_min * 1000.0:.6f}, "
+                        f"{eps_max * 1000.0:.6f}] mm/m"
+                    )
+
+                    print(
+                        f"      violated = "
+                        f"{violation['limit']}"
+                    )
+
+        # ------------------------------------------------------
+        # Summary
+        # ------------------------------------------------------
+
+        print()
+        print("-" * 78)
+        print("SUMMARY")
+        print("-" * 78)
+
+        print(
+            f"Demand cases:               {n_total}"
+        )
+
+        print(
+            f"Equilibrium converged:      {equilibrium_status}"
+        )
+
+        print(
+            f"All strain limits OK:       {strain_status}"
+        )
+
+        print(
+            f"Strain-limit violations:    {n_strains_failed}"
+        )
+
+    print()
+    print("=" * 78)
     print("\nDone.")
 
 
